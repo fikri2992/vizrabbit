@@ -152,7 +152,7 @@ async def approve_rule(
 async def approve_image(
     image_id: str, project: ProjectDep, store: StoreDep, user: UserDep
 ) -> ImageAsset:
-    """"Approved" means the Brand Owner said so, with nothing left outstanding."""
+    """ "Approved" means the Brand Owner said so, with nothing left outstanding."""
     image = await repo.load(store, ImageAsset, image_id)
     if image is None or image.project_id != project.id:
         raise HTTPException(404, "image not found")

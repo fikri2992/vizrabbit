@@ -33,9 +33,7 @@ class ProjectView(BaseModel):
 
 def _view(project: Project, user_id: str) -> ProjectView:
     role = project.role_of(user_id)
-    return ProjectView(
-        project=project, role=role, permissions=sorted(permissions_for(role))
-    )
+    return ProjectView(project=project, role=role, permissions=sorted(permissions_for(role)))
 
 
 @router.get("")
@@ -50,9 +48,7 @@ async def create_project(body: CreateProject, store: StoreDep, user: UserDep) ->
     project = Project(
         id=uuid4().hex,
         name=body.name.strip(),
-        members=[
-            Member(user_id=user.id, email=user.email, name=user.name, role=Role.OWNER)
-        ],
+        members=[Member(user_id=user.id, email=user.email, name=user.name, role=Role.OWNER)],
     )
     validate_membership(project)
     await repo.save(store, project)

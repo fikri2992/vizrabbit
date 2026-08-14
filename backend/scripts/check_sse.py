@@ -62,9 +62,14 @@ async def main() -> int:
 
     failures = []
     try:
-        async with httpx.AsyncClient(
-            base_url=f"http://127.0.0.1:{PORT}", cookies={"session": session_cookie()}, timeout=10
-        ) as client, client.stream("GET", f"/api/projects/{PROJECT_ID}/events") as response:
+        async with (
+            httpx.AsyncClient(
+                base_url=f"http://127.0.0.1:{PORT}",
+                cookies={"session": session_cookie()},
+                timeout=10,
+            ) as client,
+            client.stream("GET", f"/api/projects/{PROJECT_ID}/events") as response,
+        ):
             if response.status_code != 200:
                 print(f"FAIL: stream returned {response.status_code}")
                 return 1

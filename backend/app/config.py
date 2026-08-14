@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     #                     no gemini-3.5-pro — the Pro line went 3 -> 3.1. 3.1 Pro is
     #                     newer by release date but lower by version number, so the
     #                     rule is satisfied by 3.7 Flash being the primary model.
-    #                     GA on Vertex AI; preview-only on the Gemini API.
+    #                     Verified 2026-08-15: on Vertex the id that resolves is
+    #                     `gemini-3.1-pro-preview`; plain `gemini-3.1-pro` 404s.
     model_flash: str = "gemini-3.7-flash"
-    model_pro: str = "gemini-3.1-pro"
+    model_pro: str = "gemini-3.1-pro-preview"
 
     # --- Pipeline caps (domain-model.md decisions 2, 5, 7) ----------------
     grid_cols: int = 8
@@ -33,8 +34,16 @@ class Settings(BaseSettings):
     max_concurrent_images: int = 3
 
     # --- Google Cloud -----------------------------------------------------
+    #: AI Studio key. Leave empty and set ``use_vertex_ai`` to authenticate through
+    #: Vertex AI with Application Default Credentials instead.
+    google_api_key: str = ""
     gcp_project: str = ""
+    #: Region for Cloud Run, GCS and friends.
     gcp_location: str = "us-central1"
+    #: Region for Gemini specifically. These models are served from the *global*
+    #: endpoint — regional endpoints 404 for them — so this is deliberately separate
+    #: from ``gcp_location``, which follows wherever the rest of the app is hosted.
+    vertex_location: str = "global"
     gcs_bucket: str = ""
     firestore_database: str = "(default)"
     use_vertex_ai: bool = False
@@ -63,3 +72,36 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def export_genai_environment(target: dict[str, str] | None = None) -> dict[str, str]:
+    """Publish our settings as the environment variables google-genai reads.
+
+    pydantic-settings parses ``.env`` into this object, but the Google SDK looks at
+    ``os.environ`` directly — so without this, everything configured in ``.env`` is
+    invisible to it and the client falls back to "no API key was provided".
+
+    Existing environment variables win: a real shell export should always beat a
+    file. Returns the variables that were set, for diagnostics.
+    """
+    import os
+
+    target = os.environ if target is None else target
+
+    wanted: dict[str, str] = {}
+    if settings.use_vertex_ai:
+        wanted["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        if settings.gcp_project:
+            wanted["GOOGLE_CLOUD_PROJECT"] = settings.gcp_project
+        if settings.vertex_location:
+            wanted["GOOGLE_CLOUD_LOCATION"] = settings.vertex_location
+    elif settings.google_api_key:
+        wanted["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
+        wanted["GOOGLE_API_KEY"] = settings.google_api_key
+
+    applied = {key: value for key, value in wanted.items() if not target.get(key)}
+    target.update(applied)
+    return applied
+
+
+export_genai_environment()

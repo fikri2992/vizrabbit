@@ -620,9 +620,7 @@ async def test_proposing_a_rule_notifies_the_owner(client, project, store):
     await link_real_members(store, project)
 
     as_user(client, DESIGNER)
-    client.post(
-        f"/api/projects/{project}/defects/d1/memory", json={"description": "Check hands"}
-    )
+    client.post(f"/api/projects/{project}/defects/d1/memory", json={"description": "Check hands"})
 
     as_user(client, OWNER)
     kinds = [n["kind"] for n in client.get("/api/notifications").json()]

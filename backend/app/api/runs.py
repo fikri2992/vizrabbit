@@ -107,9 +107,7 @@ async def _image_view(store, blobs, image: ImageAsset) -> ImageView:
 
 
 @router.get("/projects/{project_id}/events")
-async def stream_events(
-    request: Request, project: ProjectDep, bus: BusDep
-) -> StreamingResponse:
+async def stream_events(request: Request, project: ProjectDep, bus: BusDep) -> StreamingResponse:
     """Server-sent events: the agent narrating its own work."""
     queue = bus.subscribe(project.id)
 

@@ -64,9 +64,7 @@ class Guideline(BaseModel):
         """Raw doc plus its clarifications — never compiled, never lossy."""
         if not self.clarifications:
             return self.raw_text
-        answered = "\n".join(
-            f"- Q: {c.question}\n  A: {c.answer}" for c in self.clarifications
-        )
+        answered = "\n".join(f"- Q: {c.question}\n  A: {c.answer}" for c in self.clarifications)
         return f"{self.raw_text}\n\n## Clarifications from the brand owner\n\n{answered}"
 
 

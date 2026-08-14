@@ -326,9 +326,7 @@ async def test_images_are_listed_per_run_in_upload_order(store: Store):
                 created_at=base + timedelta(seconds=index),
             ),
         )
-    await repo.save(
-        store, ImageAsset(id="other", project_id="p1", run_id="r2", filename="x.png")
-    )
+    await repo.save(store, ImageAsset(id="other", project_id="p1", run_id="r2", filename="x.png"))
 
     assert [i.id for i in await repo.images_for_run(store, "r1")] == ["i0", "i1", "i2"]
 

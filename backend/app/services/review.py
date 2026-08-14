@@ -95,7 +95,7 @@ async def override_severity(
 async def approve_image(
     store: Store, project: Project, image: ImageAsset, user: User
 ) -> ImageAsset:
-    """"Approved" means the Brand Owner said so — nothing else sets this."""
+    """ "Approved" means the Brand Owner said so — nothing else sets this."""
     require(project, user.id, Permission.APPROVE_IMAGE)
 
     outstanding = [
@@ -155,9 +155,7 @@ async def approve_memory_rule(
     return rule
 
 
-async def find_colliding_rules(
-    store: Store, project_id: str, description: str
-) -> list[MemoryRule]:
+async def find_colliding_rules(store: Store, project_id: str, description: str) -> list[MemoryRule]:
     """Existing active rules that share significant wording with a proposal.
 
     A cheap lexical overlap check, not a semantic one: its job is to decide whether
