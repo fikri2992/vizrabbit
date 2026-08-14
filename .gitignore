@@ -1,0 +1,27 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+*-key.json
+service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Eval artifacts
+eval/output/
+eval/images/**/*.png
+!eval/images/**/.gitkeep
+
+# OS
+Thumbs.db
+.DS_Store
