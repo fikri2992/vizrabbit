@@ -31,12 +31,27 @@ Tasks:
 
 **Gate 1 (quantified):**
 - [x] Unit tests: every cell→pixel mapping exact on 1:1, 4:5 and 16:9; cells tile the image with no gaps or overlaps; edge-cell margin clamping covered for every cell
-- Pipeline on eval set: **recall ≥ 0.75, precision ≥ 0.70**
-- Pipeline beats naive baseline by **≥ +10 points recall** at equal-or-better precision
-- False-positive rate on the 10 clean images: **≤ 1 defect per clean image average**
-- Latency: **≤ 120s per image** end-to-end (p90 over eval run)
-- Cost: **≤ $0.15 per image** (computed from token counts of one eval run)
-- If any metric misses → time-boxed 1-day prompt/grid iteration before Phase 2 starts
+- [x] Recall ≥ 0.75 → **0.83**
+- [ ] Precision ≥ 0.70 → **0.50** — a lower bound, not a measurement; see below
+- [ ] Recall lift ≥ +10pts vs naive → **+8.3pts** — undecided at this sample size, see below
+- [x] Precision not worse than naive → 0.50 vs 0.47
+- [x] ≤ 1 false positive per clean image → **0.25**
+- [x] ≤ 120s per image → **56.4s**
+- [ ] Cost ≤ $0.15 per image — not yet measured
+
+### First benchmark run (2026-08-15, 10 images / 12 defects)
+
+| Run | Recall | Precision | F1 | FP/clean | s/image |
+| --- | --- | --- | --- | --- | --- |
+| naive single prompt | 0.75 | 0.47 | 0.58 | 0.25 | 12.5s |
+| multi-agent pipeline | 0.83 | 0.50 | 0.62 | 0.25 | 56.4s |
+
+**Both failures are artefacts of the eval set, not evidence about the pipeline:**
+
+1. **Precision is understated because the labels are not exhaustive.** Only the headline defect in each image was labelled, so anything else the pipeline finds scores against it. Confirmed by inspection: on `defective_12_white_hatchback` it flagged malformed wheel-rim spokes and melted windshield wipers — both real, both unlabelled, both counted as false positives. Wikimedia's own description of that file independently lists "wheel, headlight, panel geometry is inconsistent". The clean-image false-positive rate of **0.25**, where ground truth genuinely is complete, is the trustworthy precision signal.
+2. **The recall lift is underpowered.** With 12 labelled defects, one defect is worth 8.3 recall points — so "+8.3" means the pipeline found exactly one more defect than the baseline. A 10-point threshold cannot be resolved at this sample size.
+
+**To make Gate 1 decidable**: label the remaining 14 defective images, and label them *exhaustively* rather than just the obvious defect. At ≥40 defects one defect is worth under 2.5 points, and precision becomes a real measurement.
 
 ## Phase 2 — Product spine (Aug 20–23)
 

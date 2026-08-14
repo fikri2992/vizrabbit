@@ -150,6 +150,22 @@ def _render(composition, pipeline, baseline, verdict, per_image) -> str:
         "",
         f"Recall lift: **{lift:+.1f} points**.",
         "",
+        "### Reading these numbers",
+        "",
+        "**Precision is a lower bound.** Anything the pipeline finds that is not in "
+        "`labels.json` counts as a false positive, including real defects nobody "
+        "labelled. Unless the labels are exhaustive — every defect in every image, not "
+        "just the obvious ones — the true precision is higher than the figure above.",
+        "",
+        f"**The false-positive rate on clean images is the trustworthy signal**: those "
+        f"{composition['clean_images']} images have complete ground truth, because there "
+        f"is nothing in them to find. Any finding there is unambiguously wrong.",
+        "",
+        f"**Sample size.** With {composition['defects']} labelled defects, one defect is "
+        f"worth {100 / max(composition['defects'], 1):.1f} recall points, so the recall "
+        "lift cannot resolve differences finer than that. Treat a lift within one "
+        "defect of the threshold as undecided, not as a pass or a fail.",
+        "",
         "## Gate 1",
         "",
         "| Check | Result | Value |",

@@ -1,17 +1,109 @@
 [
   {
-    "image": "example_hands.png",
+    "image": "defective/defective_01_ai_generated_hand.png",
     "defects": [
       {
         "cells": ["C4"],
         "category": "anatomy",
         "rule": "ANAT-01",
-        "note": "Replace this entry. Six fingers on the model's left hand."
+        "note": "Digits converge into a merged knuckle structure with no coherent palm; fingers fan from an impossible junction."
+      },
+      {
+        "cells": ["B4"],
+        "category": "anatomy",
+        "rule": "ANAT-01",
+        "note": "Extra digit extends to the left, separate from the main finger fan."
       }
     ]
   },
   {
-    "image": "example_clean.png",
-    "defects": []
-  }
+    "image": "defective/defective_11_guinea_pig_writer.png",
+    "defects": [
+      {
+        "cells": ["D5"],
+        "category": "physics",
+        "rule": "PHYS-01",
+        "note": "Two lit cigarettes float in mid-air, held by nothing and not in the animal's mouth."
+      },
+      {
+        "cells": ["E4", "F4"],
+        "category": "artifact",
+        "rule": "ARTF-05",
+        "note": "A second, detached pair of spectacle frames floats above the head, duplicating the pair on the eyes."
+      },
+      {
+        "cells": ["C7"],
+        "category": "artifact",
+        "rule": "ARTF-01",
+        "note": "Text in the left-hand book is unreadable squiggle rather than letterforms."
+      },
+      {
+        "cells": ["F8"],
+        "category": "artifact",
+        "rule": "ARTF-01",
+        "note": "Text in the open book is unreadable squiggle rather than letterforms."
+      }
+    ]
+  },
+  {
+    "image": "defective/defective_12_white_hatchback.png",
+    "defects": [
+      {
+        "cells": ["I3"],
+        "category": "artifact",
+        "rule": "ARTF-03",
+        "note": "An extra door handle sits high on the rear quarter panel, where there is no door."
+      }
+    ]
+  },
+  {
+    "image": "defective/defective_16_godzilla_court.png",
+    "defects": [
+      {
+        "cells": ["F4", "G4"],
+        "category": "anatomy",
+        "rule": "ANAT-02",
+        "note": "The raised claw's digits are webbed and merge at the base; the count and joint structure are incoherent."
+      }
+    ]
+  },
+  {
+    "image": "defective/defective_18_wikipedia_vase.png",
+    "defects": [
+      {
+        "cells": ["F4"],
+        "category": "artifact",
+        "rule": "ARTF-01",
+        "note": "The globe's glyphs are nonsense fragments — 'STA', 'VV', 'FI', 'ME' — rather than script."
+      }
+    ]
+  },
+  {
+    "image": "defective/defective_20_leerparadijs_education.png",
+    "defects": [
+      {
+        "cells": ["C5"],
+        "category": "anatomy",
+        "rule": "ANAT-01",
+        "note": "The hand holding the scissors has elongated fingers that fuse into the blades."
+      },
+      {
+        "cells": ["D5"],
+        "category": "anatomy",
+        "rule": "ANAT-01",
+        "note": "The second hand reads as a shapeless glove; finger separation is lost where it grips the tool."
+      },
+      {
+        "cells": ["C8"],
+        "category": "artifact",
+        "rule": "ARTF-01",
+        "note": "Printed text on the foreground sheet is gibberish: 'LENTENEBUTJGINE ESIS AE DEUFRMENT'."
+      }
+    ]
+  },
+
+  { "image": "clean_01.png", "defects": [] },
+  { "image": "clean_02.png", "defects": [] },
+  { "image": "clean_03.png", "defects": [] },
+  { "image": "clean_04.png", "defects": [] }
 ]
