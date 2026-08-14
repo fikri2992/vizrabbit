@@ -3,6 +3,7 @@ import { mapActions, mapState } from 'pinia'
 
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import GuidelinePanel from '@/components/GuidelinePanel.vue'
+import MemoryPanel from '@/components/MemoryPanel.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
 import { summarize } from '@/domain/defects'
 import { useProjectsStore } from '@/stores/projects'
@@ -10,7 +11,7 @@ import { useReviewStore } from '@/stores/review'
 
 export default {
   name: 'ProjectPage',
-  components: { ActivityFeed, GuidelinePanel, SeverityChip },
+  components: { ActivityFeed, GuidelinePanel, MemoryPanel, SeverityChip },
   props: { projectId: { type: String, required: true } },
   data() {
     return { dragging: false }
@@ -23,6 +24,9 @@ export default {
     },
     canEditGuideline() {
       return useProjectsStore().can('edit_guideline')
+    },
+    canApproveMemory() {
+      return useProjectsStore().can('approve_memory_rule')
     },
   },
   async created() {
@@ -132,6 +136,7 @@ export default {
 
       <div class="space-y-6">
         <ActivityFeed :events="recentActivity" :streaming="streaming" />
+        <MemoryPanel :project-id="projectId" :can-approve="canApproveMemory" />
         <GuidelinePanel :project-id="projectId" :can-edit="canEditGuideline" />
       </div>
     </div>

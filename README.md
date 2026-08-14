@@ -104,9 +104,16 @@ origin: no CORS, no second deployment, and the session cookie just works.
 gcloud run deploy visual-qa --source . --region asia-southeast2 --allow-unauthenticated --memory 2Gi --cpu 2 --timeout 900
 ```
 
-Set on the service (`--set-env-vars`): `USE_VERTEX_AI=true`, `VERTEX_LOCATION=global`,
-`GCP_PROJECT`, `GCS_BUCKET`, `SESSION_SECRET`, and — once you know the service URL —
+Set as plain env vars: `USE_VERTEX_AI=true`, `VERTEX_LOCATION=global`,
+`GCP_PROJECT`, `GCS_BUCKET`, `GOOGLE_CLIENT_ID`, and — once you know the service URL —
 `FRONTEND_ORIGIN=<url>` and `OAUTH_REDIRECT_URI=<url>/auth/callback`.
+
+Secrets go through Secret Manager rather than plain env vars, so they never appear in
+`gcloud run services describe` output:
+
+```bash
+gcloud run services update visual-qa --region asia-southeast2 --set-secrets "SESSION_SECRET=visual-qa-session-secret:latest,GOOGLE_CLIENT_SECRET=visual-qa-oauth-client-secret:latest"
+```
 
 Concurrency is capped and the service runs a single worker on purpose: the SSE event
 bus is per-process, so a second worker would split subscribers across processes that
