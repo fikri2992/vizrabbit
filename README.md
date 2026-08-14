@@ -7,14 +7,14 @@ scans images against brand and physics guidelines, zooms into suspect regions to
 it found, draws its own annotations and then checks its own work — producing frame.io-style
 review threads that a brand owner can act on.
 
-- **Docs**: [domain model](docs/domain-model.md) · [implementation plan](docs/implementation-plan.md) · [codebase rules](AGENTS.md)
+- **Docs**: [architecture](docs/architecture.html) · [domain model](docs/domain-model.md) · [implementation plan](docs/implementation-plan.md) · [codebase rules](AGENTS.md)
 - **Stack**: Vue 3 (Options API) + Vite + Tailwind · FastAPI + Google ADK · Firestore + GCS + Cloud Run
-- **Models**: `gemini-3.7-flash` (Scanner, Inspector, Annotator) · `gemini-3.1-pro` (final gate, ≤3 calls per run)
+- **Models**: `gemini-3.7-flash` (Scanner, Inspector, Annotator) · `gemini-3.1-pro-preview` (final gate, ≤3 calls per run)
 
 ## How it works
 
 ```
-                        ┌─ Scanner ──────── original + 8x8 labelled grid -> suspect cells
+                        ┌─ Scanner ──────── original + labelled grid -> suspect cells
 Orchestrator (≤3 images ├─ Inspector ────── contact sheet per cell -> confirm / dismiss
 in parallel)            ├─ Annotator ────── draw circle -> re-read own output -> adjust (≤3)
                         └─ Pro gate ─────── final verification, ≤3 calls per run

@@ -1,0 +1,713 @@
+<title>Visual QA Architecture</title>
+<style>
+  :root {
+    --paper: #f5f6f7;
+    --surface: #ffffff;
+    --ink: #14171c;
+    --ink-soft: #4a5259;
+    --ink-faint: #7c858d;
+    --rule: #d9dde0;
+    --accent: #0e6b73;
+    --accent-soft: #e3eff0;
+    --blocker: #c0392b;
+    --warning: #a06a10;
+    --nitpick: #2f6f95;
+    --agent: #6b4fa8;
+
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0f1216;
+      --surface: #161a1f;
+      --ink: #e6eaed;
+      --ink-soft: #a3adb5;
+      --ink-faint: #6f7981;
+      --rule: #2a3037;
+      --accent: #4fb3bd;
+      --accent-soft: #16292c;
+      --blocker: #e8695a;
+      --warning: #d9a441;
+      --nitpick: #64a8d0;
+      --agent: #a98ee0;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0f1216;
+    --surface: #161a1f;
+    --ink: #e6eaed;
+    --ink-soft: #a3adb5;
+    --ink-faint: #6f7981;
+    --rule: #2a3037;
+    --accent: #4fb3bd;
+    --accent-soft: #16292c;
+    --blocker: #e8695a;
+    --warning: #d9a441;
+    --nitpick: #64a8d0;
+    --agent: #a98ee0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+
+  .measure { max-width: 68ch; }
+
+  /* --- masthead --- */
+  header { display: flex; flex-direction: column; gap: 1rem; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(1.9rem, 4vw, 2.7rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 62ch;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.75rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    padding-top: 1rem;
+    border-top: 1px solid var(--rule);
+  }
+  .meta b { color: var(--ink-soft); font-weight: 600; }
+
+  /* --- sections --- */
+  section { display: flex; flex-direction: column; gap: 1.25rem; }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin: 0;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+  h2 .num {
+    color: var(--accent);
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+  }
+
+  h3 {
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0.5rem 0 0;
+  }
+
+  p { margin: 0; }
+  .measure p + p { margin-top: 0.9rem; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+
+  figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .scroller { overflow-x: auto; }
+  figure svg {
+    display: block;
+    width: 100%;
+    min-width: 640px;
+    height: auto;
+    color: var(--ink);
+  }
+  figcaption {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    max-width: 68ch;
+  }
+
+  /* --- data --- */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .card h4 {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0;
+    font-weight: 600;
+  }
+  .card .value {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .card p { font-size: 0.85rem; color: var(--ink-soft); line-height: 1.5; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.9rem 0.6rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  td.num { font-family: var(--mono); text-align: right; padding-right: 1.25rem; }
+  tr.highlight td { color: var(--ink); font-weight: 600; }
+  tr.highlight td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 0.75rem; }
+
+  ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  li { padding-left: 0.2rem; }
+  li::marker { color: var(--accent); }
+
+  .note {
+    border-left: 2px solid var(--warning);
+    padding: 0.15rem 0 0.15rem 1rem;
+    color: var(--ink-soft);
+    font-size: 0.93rem;
+    max-width: 66ch;
+  }
+  .note b { color: var(--ink); }
+
+  .pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .pill {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 0.2rem 0.7rem;
+    color: var(--ink-soft);
+    background: var(--surface);
+  }
+
+  a { color: var(--accent); }
+  a:focus-visible, .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Architecture · All Things Agentic</p>
+    <h1>Visual QA</h1>
+    <p class="standfirst">
+      A multi-agent pipeline that finds defects in AI-generated commercial imagery, points at
+      them, checks its own aim, and only closes a finding once it has verified the fix.
+    </p>
+    <div class="meta">
+      <span><b>Frontend</b> Vue 3 · Vite · Tailwind</span>
+      <span><b>Backend</b> FastAPI · Google ADK</span>
+      <span><b>Cloud</b> Cloud Run · Firestore · GCS · Vertex AI</span>
+      <span><b>Models</b> gemini-3.7-flash · gemini-3.1-pro-preview</span>
+    </div>
+  </header>
+
+  <!-- ================= 1. THE PIPELINE ================= -->
+  <section>
+    <h2><span class="num">01</span> The detection pipeline</h2>
+
+    <div class="measure">
+      <p>
+        A vision model asked to find defects in a full-resolution image misses small ones — a sixth
+        finger occupies a few hundred pixels in a two-megapixel frame. The pipeline's central move is
+        to separate <em>noticing</em> from <em>judging</em>, and to give each stage the resolution its
+        job actually needs.
+      </p>
+      <p>
+        Every stage speaks in grid cells, never pixels. The model emits <code>C4</code>; tested code
+        converts that to a crop box. Spatial reasoning stays inside logic that can be checked.
+      </p>
+    </div>
+
+    <figure>
+      <div class="scroller">
+        <svg viewBox="0 0 1020 400" role="img"
+             aria-label="Four-stage pipeline: Scanner sees the whole gridded image and over-flags suspect cells; Inspector sees a zoomed contact sheet and confirms or dismisses each one; Annotator draws a circle then re-reads its own render up to three times; a Pro-tier gate reviews all findings at most three times per run.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- lane labels -->
+          <text x="0" y="20" font-family="ui-monospace, monospace" font-size="11"
+                fill="currentColor" opacity="0.55" letter-spacing="1.2">WHAT THE MODEL SEES</text>
+          <text x="0" y="150" font-family="ui-monospace, monospace" font-size="11"
+                fill="currentColor" opacity="0.55" letter-spacing="1.2">STAGE</text>
+          <text x="0" y="290" font-family="ui-monospace, monospace" font-size="11"
+                fill="currentColor" opacity="0.55" letter-spacing="1.2">BIAS</text>
+
+          <!-- ==== stage 1 ==== -->
+          <rect x="20" y="34" width="180" height="52" rx="3" fill="none"
+                stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
+          <text x="110" y="56" text-anchor="middle" font-size="12" fill="currentColor">full frame + grid</text>
+          <text x="110" y="74" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.6">≤1536px long edge</text>
+
+          <rect x="20" y="110" width="180" height="66" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="110" y="139" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="14" font-weight="600" fill="currentColor">Scanner</text>
+          <text x="110" y="159" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">gemini-3.7-flash</text>
+
+          <text x="110" y="278" text-anchor="middle" font-size="12" fill="#0e6b73"
+                font-family="ui-monospace, monospace" font-weight="600">RECALL</text>
+          <text x="110" y="296" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.65">over-flags on purpose</text>
+
+          <!-- arrow 1 -->
+          <line x1="204" y1="143" x2="256" y2="143" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="230" y="132" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">cells</text>
+
+          <!-- ==== stage 2 ==== -->
+          <rect x="262" y="34" width="180" height="52" rx="3" fill="none"
+                stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
+          <text x="352" y="56" text-anchor="middle" font-size="12" fill="currentColor">context + 2× zoom</text>
+          <text x="352" y="74" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.6">cell + 1-cell margin</text>
+
+          <rect x="262" y="110" width="180" height="66" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="352" y="139" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="14" font-weight="600" fill="currentColor">Inspector</text>
+          <text x="352" y="159" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">gemini-3.7-flash</text>
+
+          <text x="352" y="278" text-anchor="middle" font-size="12" fill="#0e6b73"
+                font-family="ui-monospace, monospace" font-weight="600">PRECISION</text>
+          <text x="352" y="296" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.65">must see it to confirm</text>
+
+          <!-- dismissal drop-out -->
+          <line x1="352" y1="180" x2="352" y2="222" stroke="currentColor" stroke-width="1.2"
+                stroke-dasharray="4 3" marker-end="url(#ar)" opacity="0.7"/>
+          <text x="362" y="212" font-size="10.5" fill="currentColor" opacity="0.7">dismissed → logged, never deleted</text>
+
+          <!-- arrow 2 -->
+          <line x1="446" y1="143" x2="498" y2="143" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="472" y="132" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">confirmed</text>
+
+          <!-- ==== stage 3 ==== -->
+          <rect x="504" y="34" width="190" height="52" rx="3" fill="none"
+                stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
+          <text x="599" y="56" text-anchor="middle" font-size="12" fill="currentColor">its own annotated render</text>
+          <text x="599" y="74" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.6">circle drawn by code</text>
+
+          <rect x="504" y="110" width="190" height="66" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="599" y="139" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="14" font-weight="600" fill="currentColor">Annotator</text>
+          <text x="599" y="159" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">gemini-3.7-flash</text>
+
+          <!-- self-check loop -->
+          <path d="M 520 176 C 500 210, 500 210, 540 210 L 660 210 C 700 210, 700 210, 680 178"
+                fill="none" stroke="#0e6b73" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="599" y="228" text-anchor="middle" font-size="10.5" fill="#0e6b73">
+            re-reads the render, nudges the circle · ≤3 passes
+          </text>
+
+          <text x="599" y="278" text-anchor="middle" font-size="12" fill="#0e6b73"
+                font-family="ui-monospace, monospace" font-weight="600">SELF-CORRECTION</text>
+          <text x="599" y="296" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.65">unverified → needs human review</text>
+
+          <!-- arrow 3 -->
+          <line x1="698" y1="143" x2="750" y2="143" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="724" y="132" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">pins</text>
+
+          <!-- ==== stage 4 ==== -->
+          <rect x="756" y="34" width="180" height="52" rx="3" fill="none"
+                stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
+          <text x="846" y="56" text-anchor="middle" font-size="12" fill="currentColor">every pin at once</text>
+          <text x="846" y="74" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.6">fully annotated frame</text>
+
+          <rect x="756" y="110" width="180" height="66" rx="3" fill="none"
+                stroke="#0e6b73" stroke-width="2"/>
+          <text x="846" y="139" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="14" font-weight="600" fill="currentColor">Pro gate</text>
+          <text x="846" y="159" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">gemini-3.1-pro-preview</text>
+
+          <text x="846" y="278" text-anchor="middle" font-size="12" fill="#0e6b73"
+                font-family="ui-monospace, monospace" font-weight="600">ECONOMY</text>
+          <text x="846" y="296" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.65">≤3 calls per run, total</text>
+
+          <!-- output -->
+          <line x1="940" y1="143" x2="990" y2="143" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+
+          <!-- footer band -->
+          <line x1="20" y1="340" x2="1000" y2="340" stroke="currentColor" stroke-opacity="0.25"/>
+          <text x="20" y="364" font-size="11.5" fill="currentColor" opacity="0.75">
+            Orchestrator fans images out, capped at 3 concurrent · every model call retries transient failures with jittered backoff
+          </text>
+          <text x="20" y="384" font-size="11.5" fill="currentColor" opacity="0.75">
+            Model output is always a validated schema; invented cell refs are dropped rather than trusted
+          </text>
+        </svg>
+      </div>
+      <figcaption>
+        The cheap model does the volume work and the expensive one is a capped final reviewer. What
+        changes between stages is the resolution the model is given and the direction it is told to
+        err in — the Scanner is rewarded for noticing, the Inspector for refusing.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ================= 2. LIFECYCLE ================= -->
+  <section>
+    <h2><span class="num">02</span> Who may close a defect</h2>
+
+    <div class="measure">
+      <p>
+        A review tool where anyone can tick "fixed" degrades into a checklist. Here resolution is an
+        act the agent performs, not a claim a human makes: a reviewer uploads a corrected version and
+        the Re-checker compares before and after crops of that defect's region.
+      </p>
+      <p>
+        Each project has exactly one <b>Brand Owner</b> — the single accountable member who answers
+        guideline questions, approves memory rules, and owns false positives. Two escape hatches exist
+        for them alone, and both leave a record.
+      </p>
+    </div>
+
+    <figure>
+      <div class="scroller">
+        <svg viewBox="0 0 1020 300" role="img"
+             aria-label="Defect lifecycle: from open, a reviewer or owner uploads a fixed version moving it to fix submitted, then the agent re-checks it and either verifies it resolved or returns it to open. Only the owner may dismiss it as a false positive or override-approve it with a logged rationale. No human can reach verified resolved.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar2a" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b4fa8"/>
+            </marker>
+          </defs>
+
+          <!-- open -->
+          <rect x="20" y="110" width="150" height="54" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="95" y="134" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="13" font-weight="600" fill="currentColor">open</text>
+          <text x="95" y="152" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.65">needs_human_review</text>
+
+          <!-- arrow: submit fix -->
+          <line x1="174" y1="137" x2="246" y2="137" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="210" y="126" text-anchor="middle" font-size="10.5" fill="currentColor">uploads</text>
+          <text x="210" y="153" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.7">reviewer</text>
+
+          <!-- fix submitted -->
+          <rect x="250" y="110" width="150" height="54" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="325" y="142" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="13" font-weight="600" fill="currentColor">fix_submitted</text>
+
+          <line x1="404" y1="137" x2="476" y2="137" stroke="#6b4fa8" stroke-width="1.5" marker-end="url(#ar2a)"/>
+          <text x="440" y="126" text-anchor="middle" font-size="10.5" fill="#6b4fa8">picks up</text>
+
+          <!-- rechecking -->
+          <rect x="480" y="110" width="160" height="54" rx="3" fill="none" stroke="#6b4fa8" stroke-width="2"/>
+          <text x="560" y="134" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="13" font-weight="600" fill="currentColor">agent_rechecking</text>
+          <text x="560" y="152" text-anchor="middle" font-size="10.5" fill="#6b4fa8">before vs after crop</text>
+
+          <!-- resolved -->
+          <line x1="644" y1="137" x2="716" y2="137" stroke="#6b4fa8" stroke-width="1.5" marker-end="url(#ar2a)"/>
+          <text x="680" y="126" text-anchor="middle" font-size="10.5" fill="#6b4fa8">gone</text>
+
+          <rect x="720" y="110" width="170" height="54" rx="3" fill="none" stroke="#6b4fa8" stroke-width="2"/>
+          <text x="805" y="142" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="13" font-weight="600" fill="currentColor">verified_resolved</text>
+
+          <!-- bounce back -->
+          <path d="M 560 108 C 560 62, 560 62, 480 62 L 175 62 C 95 62, 95 62, 95 106"
+                fill="none" stroke="#6b4fa8" stroke-width="1.5" marker-end="url(#ar2a)"/>
+          <text x="330" y="53" text-anchor="middle" font-size="10.5" fill="#6b4fa8">still present → back to open</text>
+
+          <!-- owner-only exits -->
+          <path d="M 95 168 L 95 216 L 300 216" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-dasharray="5 3" marker-end="url(#ar2)"/>
+          <rect x="304" y="192" width="170" height="48" rx="3" fill="none"
+                stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 3"/>
+          <text x="389" y="222" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="12.5" fill="currentColor">dismissed</text>
+
+          <path d="M 478 216 L 560 216" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-dasharray="5 3" marker-end="url(#ar2)"/>
+          <rect x="564" y="192" width="200" height="48" rx="3" fill="none"
+                stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 3"/>
+          <text x="664" y="215" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="12.5" fill="currentColor">override_approved</text>
+          <text x="664" y="231" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">rationale required</text>
+
+          <text x="95" y="262" font-size="10.5" fill="currentColor" opacity="0.75">Brand Owner only ·</text>
+          <text x="95" y="278" font-size="10.5" fill="currentColor" opacity="0.75">dashed = human decision, logged</text>
+
+          <text x="790" y="215" font-size="11.5" fill="#6b4fa8" font-weight="600"
+                font-family="ui-monospace, monospace">no human path</text>
+          <text x="790" y="232" font-size="11.5" fill="#6b4fa8" font-weight="600"
+                font-family="ui-monospace, monospace">reaches resolved</text>
+        </svg>
+      </div>
+      <figcaption>
+        Purple marks what the agent alone controls. The state machine is enforced in one place and
+        covered by a test over all 196 combinations of state, target state, and role — including the
+        invariant that no role, owner included, can reach <code>verified_resolved</code> by hand.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ================= 3. DEPLOYMENT ================= -->
+  <section>
+    <h2><span class="num">03</span> Deployment</h2>
+
+    <div class="measure">
+      <p>
+        One Cloud Run service serves the API and the built Vue app from a single origin. That removes
+        CORS, a second deployment, and every cross-site cookie problem that comes with splitting them.
+      </p>
+    </div>
+
+    <figure>
+      <div class="scroller">
+        <svg viewBox="0 0 1020 300" role="img"
+             aria-label="Deployment: a browser talks to one Cloud Run service over HTTPS, receiving both the Vue app and a server-sent events stream. That service reads and writes Firestore for documents, Cloud Storage for images, and calls Vertex AI's global endpoint for Gemini.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- browser -->
+          <rect x="20" y="100" width="150" height="70" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="95" y="130" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="13" font-weight="600" fill="currentColor">Browser</text>
+          <text x="95" y="149" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.65">Google sign-in</text>
+
+          <line x1="174" y1="122" x2="286" y2="122" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <text x="230" y="112" text-anchor="middle" font-size="10.5" fill="currentColor">HTTPS</text>
+
+          <line x1="286" y1="150" x2="174" y2="150" stroke="#0e6b73" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <text x="230" y="167" text-anchor="middle" font-size="10.5" fill="#0e6b73">SSE · live agent feed</text>
+
+          <!-- cloud run -->
+          <rect x="290" y="78" width="230" height="114" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+          <text x="405" y="106" text-anchor="middle" font-family="ui-monospace, monospace"
+                font-size="13" font-weight="600" fill="currentColor">Cloud Run</text>
+          <text x="405" y="126" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">FastAPI + ADK + Vue build</text>
+          <text x="405" y="146" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.6">1 worker · asia-southeast2</text>
+          <text x="405" y="166" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.6">one origin, no CORS</text>
+
+          <!-- firestore -->
+          <line x1="524" y1="100" x2="616" y2="70" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <text x="576" y="76" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.8">documents</text>
+          <rect x="620" y="42" width="170" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="705" y="66" text-anchor="middle" font-family="ui-monospace, monospace" font-size="12.5" fill="currentColor">Firestore</text>
+          <text x="705" y="83" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.65">projects · defects · comments</text>
+
+          <!-- gcs -->
+          <line x1="524" y1="135" x2="616" y2="135" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <text x="576" y="126" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.8">images</text>
+          <rect x="620" y="110" width="170" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="705" y="134" text-anchor="middle" font-family="ui-monospace, monospace" font-size="12.5" fill="currentColor">Cloud Storage</text>
+          <text x="705" y="151" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.65">original · grid · annotated</text>
+
+          <!-- vertex -->
+          <line x1="524" y1="170" x2="616" y2="200" stroke="#0e6b73" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <text x="576" y="199" text-anchor="middle" font-size="10.5" fill="#0e6b73">inference</text>
+          <rect x="620" y="178" width="170" height="66" rx="3" fill="none" stroke="#0e6b73" stroke-width="2"/>
+          <text x="705" y="202" text-anchor="middle" font-family="ui-monospace, monospace" font-size="12.5" fill="currentColor">Vertex AI</text>
+          <text x="705" y="219" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.65">gemini-3.7-flash</text>
+          <text x="705" y="235" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.65">gemini-3.1-pro-preview</text>
+
+          <!-- global endpoint note -->
+          <text x="820" y="205" font-size="10.5" fill="#0e6b73">global endpoint —</text>
+          <text x="820" y="221" font-size="10.5" fill="#0e6b73">regional 404s for</text>
+          <text x="820" y="237" font-size="10.5" fill="#0e6b73">these models</text>
+
+          <line x1="20" y1="272" x2="1000" y2="272" stroke="currentColor" stroke-opacity="0.25"/>
+          <text x="20" y="292" font-size="11.5" fill="currentColor" opacity="0.75">
+            Storage sits behind one narrow interface with two real implementations — in-memory for local work, Firestore and GCS in cloud — validated by the same contract suite
+          </text>
+        </svg>
+      </div>
+      <figcaption>
+        The service runs a single worker deliberately: the SSE event bus is per-process, so a second
+        worker would split subscribers across processes that cannot see each other's events.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ================= 4. EVIDENCE ================= -->
+  <section>
+    <h2><span class="num">04</span> Does the pipeline beat a single prompt?</h2>
+
+    <div class="measure">
+      <p>
+        The whole design rests on one claim, so it is measured rather than asserted. The baseline is
+        the same model, the same guidelines, and the same gridded image in a single call — what a
+        competent developer would build in an afternoon. What it does not get is the zoom pass, the
+        self-check, or the gate.
+      </p>
+    </div>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th class="num">Recall</th>
+            <th class="num">Precision</th>
+            <th class="num">F1</th>
+            <th class="num">FP / clean image</th>
+            <th class="num">s / image</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Naive single prompt</td>
+            <td class="num">0.75</td><td class="num">0.47</td><td class="num">0.58</td>
+            <td class="num">0.25</td><td class="num">12.5</td>
+          </tr>
+          <tr class="highlight">
+            <td>Multi-agent pipeline</td>
+            <td class="num">0.83</td><td class="num">0.50</td><td class="num">0.62</td>
+            <td class="num">0.25</td><td class="num">56.4</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note">
+      <b>Read these numbers carefully.</b> The eval set is currently 10 images and 12 labelled defects,
+      and the labels are not exhaustive — so <b>precision is a lower bound</b>, not a measurement:
+      every real defect nobody labelled scores against the pipeline. Verified by inspection on one
+      image, where it correctly flagged malformed wheel-rim spokes and melted windshield wipers, both
+      unlabelled and both counted as false positives. On the clean images, where ground truth is
+      genuinely complete, it produced one finding across four images. And with 12 defects, one defect
+      is worth 8.3 recall points — the lift is not yet resolvable against a 10-point threshold.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Defect taxonomy</h4>
+        <div class="value">15 rules</div>
+        <p>Anatomy, physics and generator-artifact rules, each with an id every comment cites — <code>ANAT-01</code> for finger count, <code>ARTF-01</code> for garbled text.</p>
+      </div>
+      <div class="card">
+        <h4>Test suite</h4>
+        <div class="value">646 + 28</div>
+        <p>Backend and frontend. No mocked collaborators: pure logic gets exhaustive real tests, storage gets contract tests against both implementations, agents are measured by the benchmark.</p>
+      </div>
+      <div class="card">
+        <h4>Latency</h4>
+        <div class="value">56s</div>
+        <p>Per image, end to end, across four agents and up to three self-check passes. Budget is 120s.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 5. DESIGN DECISIONS ================= -->
+  <section>
+    <h2><span class="num">05</span> Decisions worth defending</h2>
+
+    <ul class="measure">
+      <li>
+        <b>Cell references at every model boundary.</b> Models emit <code>C4</code>, never pixel
+        coordinates. Conversion happens in tested code, so a hallucinated reference is dropped rather
+        than silently drawing a circle in the wrong place.
+      </li>
+      <li>
+        <b>The self-check loop runs in Python, not an ADK LoopAgent.</b> Each iteration must re-render
+        the image before the model can look again — the feedback signal is pixels, not text, which a
+        text-passing loop primitive cannot carry.
+      </li>
+      <li>
+        <b>Dismissals are logged, never deleted.</b> The record of what the agent considered and
+        rejected is what makes its judgement auditable instead of merely confident.
+      </li>
+      <li>
+        <b>Guidelines are never compiled.</b> A brand document goes to the model as written. Where it
+        is ambiguous the agent interviews the Brand Owner at upload time and appends the answers
+        verbatim, rather than summarising a rulebook into something lossy.
+      </li>
+      <li>
+        <b>A fix must carry an image.</b> Claiming <code>fix_submitted</code> without uploading a
+        version is rejected — otherwise a defect waits forever for a re-check with nothing to check.
+      </li>
+    </ul>
+
+    <div class="pill-row" style="margin-top:0.5rem">
+      <span class="pill">Options API, no setup sugar</span>
+      <span class="pill">Prompts as versioned .md</span>
+      <span class="pill">Pydantic-validated agent output</span>
+      <span class="pill">Jittered retry on every model call</span>
+      <span class="pill">SSE reconnect with backoff</span>
+    </div>
+  </section>
+
+</div>
