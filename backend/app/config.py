@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     max_pro_calls_per_run: int = 3
     max_concurrent_images: int = 3
 
+    # --- Model call resilience --------------------------------------------
+    # Quota limits are routine, not exceptional: one batch fans out into many
+    # concurrent calls. Total attempts, including the first.
+    max_model_retries: int = 4
+    model_retry_base_seconds: float = 2.0
+    model_retry_max_seconds: float = 30.0
+
     # --- Google Cloud -----------------------------------------------------
     #: AI Studio key. Leave empty and set ``use_vertex_ai`` to authenticate through
     #: Vertex AI with Application Default Credentials instead.

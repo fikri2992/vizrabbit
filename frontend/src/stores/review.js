@@ -59,10 +59,14 @@ export const useReviewStore = defineStore('review', {
 
     startStream(projectId) {
       this.stopStream()
-      this.streaming = true
       this.closeStream = api.stream(`/api/projects/${projectId}/events`, {
+        onOpen: () => {
+          this.streaming = true
+          // A reconnect may have missed events, so resync what they would have changed.
+          this.fetchImages(projectId)
+        },
         onEvent: (event) => this.pushEvent(projectId, event),
-        onError: () => {
+        onReconnecting: () => {
           this.streaming = false
         },
       })
