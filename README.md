@@ -1,5 +1,7 @@
 # Visual QA Agent
 
+**Live:** https://visual-qa-718560154436.asia-southeast2.run.app
+
 Multi-agent visual QA for AI-generated e-commerce and social assets. A Google ADK pipeline
 scans images against brand and physics guidelines, zooms into suspect regions to confirm what
 it found, draws its own annotations and then checks its own work — producing frame.io-style
@@ -92,6 +94,26 @@ Explore the review screen without a Gemini key, using a seeded project:
 ```bash
 cd backend && ALLOW_DEV_LOGIN=true uv run python -m scripts.seed_demo
 ```
+
+## Deploy
+
+One Cloud Run service serves both the API and the built Vue app, so there is a single
+origin: no CORS, no second deployment, and the session cookie just works.
+
+```bash
+gcloud run deploy visual-qa --source . --region asia-southeast2 --allow-unauthenticated --memory 2Gi --cpu 2 --timeout 900
+```
+
+Set on the service (`--set-env-vars`): `USE_VERTEX_AI=true`, `VERTEX_LOCATION=global`,
+`GCP_PROJECT`, `GCS_BUCKET`, `SESSION_SECRET`, and — once you know the service URL —
+`FRONTEND_ORIGIN=<url>` and `OAUTH_REDIRECT_URI=<url>/auth/callback`.
+
+Concurrency is capped and the service runs a single worker on purpose: the SSE event
+bus is per-process, so a second worker would split subscribers across processes that
+cannot see each other's events.
+
+Because `GCP_PROJECT` and `GCS_BUCKET` are set on a deployment, `ALLOW_DEV_LOGIN` is
+refused there automatically — a deployed instance can only be signed into with Google.
 
 ## Testing philosophy
 

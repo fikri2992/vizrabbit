@@ -124,12 +124,13 @@ class FirestoreStore:
         descending: bool = False,
         limit: int | None = None,
     ) -> list[Document]:
-        from google.cloud.firestore import Query
+        from google.cloud.firestore import FieldFilter, Query
 
         query = self._client.collection(collection)
         for field, value in (where or {}).items():
             is_array_field = isinstance(value, str) and field.endswith("_ids")
-            query = query.where(field, "array_contains" if is_array_field else "==", value)
+            operator = "array_contains" if is_array_field else "=="
+            query = query.where(filter=FieldFilter(field, operator, value))
         if order_by:
             direction = Query.DESCENDING if descending else Query.ASCENDING
             query = query.order_by(order_by, direction=direction)

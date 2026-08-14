@@ -35,3 +35,7 @@ These are candidates, not final ground truth. After downloading the originals, a
 ## Reuse caution
 
 Commons marks these files with free licenses or public-domain tags, but AI-output copyright treatment varies by jurisdiction and an image can still reproduce protected source material. Prefer the CC0 entries when broad reuse certainty matters, preserve attribution for CC BY-SA material, and review every file before redistribution.
+
+## Local storage
+
+The downloaded originals are stored in `eval/images/defective/`. Filenames use `defective_01_...` through `defective_20_...` in the same order as the table. Integrity hashes are recorded in `eval/defective-image-checksums.sha256`.

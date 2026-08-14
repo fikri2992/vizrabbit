@@ -22,7 +22,7 @@ dist/
 
 # Eval artifacts
 eval/output/
-eval/images/**/*.png
+eval/images/**/*
 !eval/images/**/.gitkeep
 
 # OS
