@@ -21,15 +21,16 @@ Tasks:
 ## Phase 1 — Pipeline core + eval (Aug 16–19) — make-or-break
 
 Tasks:
-- `domain/grid.py`: 8×8 aspect-adapted grid math, cell↔pixel, margin clamping
-- `imaging/`: grid overlay (A1–H8, contrast-outlined labels), crop cell+margin @2×, contact sheet, circle compositor
-- Agents: Scanner → Inspector → Annotator (verify loop ≤3) → Pro gate (≤3 calls/run); Orchestrator with batch fan-out, concurrency 3
-- Built-in AI-slop guideline text
-- Eval set: 30 labeled images (≥20 with known defects across all 4 built-in categories, ≥10 clean)
-- Benchmark harness: naive single-prompt Gemini vs pipeline; outputs recall/precision/F1 table (markdown)
+- [x] `domain/grid.py`: aspect-adapted grid math, cell↔pixel, margin clamping
+- [x] `imaging/`: grid overlay (contrast-outlined labels), crop cell+margin @2×, contact sheet with locator, circle compositor with size-relative strokes
+- [x] Agents: Scanner → Inspector → Annotator (verify loop ≤3) → Pro gate (≤3 calls/run); Orchestrator with batch fan-out, concurrency 3
+- [x] Built-in AI-slop guideline text (`ANAT-*`, `PHYS-*`, `ARTF-*` rule ids)
+- [x] Benchmark harness: naive single-prompt baseline vs pipeline; recall/precision/F1 table + explicit Gate 1 verdict, exits non-zero on failure
+- [ ] Eval set: 30 labeled images (≥20 with known defects, ≥10 clean) — **needs images + API key**
+- [ ] First benchmark run — **blocked on the eval set**
 
 **Gate 1 (quantified):**
-- Unit tests: 64/64 cell→pixel mappings exact; edge-cell margin clamping covered; all grid tests pass on 3 aspect ratios (1:1, 4:5, 16:9)
+- [x] Unit tests: every cell→pixel mapping exact on 1:1, 4:5 and 16:9; cells tile the image with no gaps or overlaps; edge-cell margin clamping covered for every cell
 - Pipeline on eval set: **recall ≥ 0.75, precision ≥ 0.70**
 - Pipeline beats naive baseline by **≥ +10 points recall** at equal-or-better precision
 - False-positive rate on the 10 clean images: **≤ 1 defect per clean image average**
@@ -40,18 +41,23 @@ Tasks:
 ## Phase 2 — Product spine (Aug 20–23)
 
 Tasks:
-- Firestore schema + GCS storage; run/image/defect/comment persistence
-- API: projects, batch upload, SSE activity stream, defects/comments CRUD
-- Vue: login, project dashboard (per-image status), upload flow
-- Live agent activity feed (SSE)
-- Review screen: pins + threaded comments + category/severity/status chips + filters
+- [x] Storage layer: `Store` interface with two real implementations (in-memory + Firestore), GCS/local blobs; run/image/defect/comment/notification persistence
+- [x] API: projects, members, guidelines, batch upload, SSE activity stream, defect threads, transitions, memory, notifications
+- [x] Vue: login (Google + local dev), project dashboard, upload flow
+- [x] Live agent activity feed (SSE) with per-stage narration
+- [x] Review screen: pins + threaded comments + severity/status chips + filters + role-aware actions
+- [x] `scripts/seed_demo.py` — runs the app with a seeded project, no cloud or model needed
 
 **Gate 2 (quantified):**
-- Browser flow: login → create project → upload **5-image batch** → watch live feed → review defects, zero manual DB touches
-- First SSE activity event **≤ 5s** after upload accepted
-- Review screen renders an image with **20 defects** without jank; pin click → thread scroll < 100ms perceived
-- Integration tests (Firestore emulator): every API route has ≥1 real-persistence test; suite **≥ 25 tests**, 0 mocked repositories
-- Refresh mid-run: feed reattaches via SSE and shows current state (no lost run)
+- [x] Browser flow: login → create project → review defects, zero manual DB touches (verified in-browser)
+- [x] Integration tests: **51** against real persistence, 0 mocked repositories
+- [x] SSE verified end-to-end: 3 events delivered in order, no subscription leak on disconnect (`scripts/check_sse.py`); browser `EventSource` connects
+- [ ] Upload a **5-image batch** → watch live feed — **needs `GOOGLE_API_KEY`** (upload + persistence covered; the pipeline stage is not)
+- [ ] First SSE activity event ≤ 5s after upload accepted — same blocker
+- [ ] Review screen with 20 defects without jank — needs a real run
+- [ ] Refresh mid-run: feed reattaches and shows current state
+
+**Note on the emulator**: no Java/Docker on the dev machine, so the Firestore emulator cannot run here. Instead the same contract suite runs against both `Store` implementations, and picks up `FirestoreStore` automatically when `FIRESTORE_EMULATOR_HOST` is set.
 
 ## Phase 3 — Lifecycle + differentiators (Aug 24–26)
 

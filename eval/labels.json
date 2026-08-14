@@ -1,0 +1,17 @@
+[
+  {
+    "image": "example_hands.png",
+    "defects": [
+      {
+        "cells": ["C4"],
+        "category": "anatomy",
+        "rule": "ANAT-01",
+        "note": "Replace this entry. Six fingers on the model's left hand."
+      }
+    ]
+  },
+  {
+    "image": "example_clean.png",
+    "defects": []
+  }
+]

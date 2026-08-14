@@ -10,6 +10,20 @@ const routes = [
     component: () => import('@/pages/DashboardPage.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/projects/:projectId',
+    name: 'project',
+    component: () => import('@/pages/ProjectPage.vue'),
+    props: true,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/projects/:projectId/images/:imageId',
+    name: 'review',
+    component: () => import('@/pages/ReviewPage.vue'),
+    props: true,
+    meta: { requiresAuth: true },
+  },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     oauth_redirect_uri: str = "http://localhost:8000/auth/callback"
     frontend_origin: str = "http://localhost:5173"
 
+    #: Local-only sign-in so the app can be run without configuring OAuth. Refused
+    #: whenever the app is pointed at real cloud infrastructure — see
+    #: ``dev_login_allowed``. Off unless explicitly switched on.
+    allow_dev_login: bool = False
+
+    @property
+    def dev_login_allowed(self) -> bool:
+        """Two independent conditions, so a stray env var alone cannot open it up:
+        the flag must be set *and* the app must not be wired to real GCP storage."""
+        return self.allow_dev_login and not self.gcp_project and not self.gcs_bucket
+
     @property
     def total_cells(self) -> int:
         return self.grid_cols * self.grid_rows

@@ -3,6 +3,7 @@
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 
 from app.config import settings
 
@@ -59,6 +60,44 @@ async def me(request: Request):
 async def logout(request: Request):
     request.session.pop(SESSION_USER_KEY, None)
     return JSONResponse({"ok": True})
+
+
+class DevLogin(BaseModel):
+    email: str
+    name: str = ""
+
+
+@router.post("/dev-login")
+async def dev_login(body: DevLogin, request: Request):
+    """Sign in without Google, for local development only.
+
+    Guarded by ``settings.dev_login_allowed``, which requires an explicit opt-in flag
+    AND the absence of any real cloud configuration. It exists so the app can be run
+    and reviewed from a fresh clone before OAuth credentials are set up.
+    """
+    if not settings.dev_login_allowed:
+        raise HTTPException(404, "not found")
+
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "a valid email is required")
+
+    request.session[SESSION_USER_KEY] = {
+        "id": f"dev:{email}",
+        "email": email,
+        "name": body.name or email.split("@")[0],
+        "picture": "",
+    }
+    return request.session[SESSION_USER_KEY]
+
+
+@router.get("/config")
+async def auth_config():
+    """Lets the sign-in page show only the options that actually work here."""
+    return {
+        "google": bool(settings.google_client_id),
+        "dev_login": settings.dev_login_allowed,
+    }
 
 
 def current_user(request: Request) -> dict:

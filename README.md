@@ -47,6 +47,11 @@ Fill in `backend/.env`:
 The OAuth client's **Authorised redirect URI** must be exactly `http://localhost:8000/auth/callback`,
 and its **Authorised JavaScript origin** `http://localhost:5173`.
 
+Everything except the Gemini key is optional for a first run: without `GCP_PROJECT`/`GCS_BUCKET`
+the app stores documents in memory and images on disk, and without OAuth you can set
+`ALLOW_DEV_LOGIN=true` to sign in by email. That flag is refused automatically whenever any
+cloud storage is configured, so it cannot be live on a deployment.
+
 ## Run
 
 ```bash
@@ -74,6 +79,18 @@ Check the wiring end-to-end — real model call, real image, validated structure
 
 ```bash
 cd backend && uv run python -m app.agents.smoke path/to/image.png
+```
+
+Check the live activity stream against a real server:
+
+```bash
+cd backend && uv run python -m scripts.check_sse
+```
+
+Explore the review screen without a Gemini key, using a seeded project:
+
+```bash
+cd backend && ALLOW_DEV_LOGIN=true uv run python -m scripts.seed_demo
 ```
 
 ## Testing philosophy
