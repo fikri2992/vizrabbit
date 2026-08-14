@@ -16,6 +16,13 @@ const STAGE_TEXT = {
   pro_gate_started: () => 'Final review by the Pro model',
   pro_gate_finished: (d) => `Final review rejected ${d.rejected} finding(s)`,
   pro_gate_skipped: () => 'Final review skipped — Pro budget spent for this run',
+  recheck_started: (d) => `Re-checking ${d.defects} defect(s) against ${d.filename}`,
+  rechecked: (d) =>
+    d.resolved
+      ? `Pin ${d.pin} verified as fixed — ${d.reason}`
+      : `Pin ${d.pin} still present — ${d.reason}`,
+  recheck_finished: (d) => `Re-check done: ${d.closed} resolved, ${d.still_open} still open`,
+  recheck_failed: (d) => `Pin ${d.pin} re-check failed, left open — ${d.error}`,
   image_finished: (d) => `${d.filename}: ${d.defects} defect(s), ${d.dismissed} dismissed`,
   image_failed: (d) => `${d.filename} failed — ${d.error}`,
   run_finished: (d) => `Run ${d.status}`,
@@ -23,8 +30,10 @@ const STAGE_TEXT = {
 
 const STAGE_TONE = {
   image_failed: 'text-red-400',
+  recheck_failed: 'text-red-400',
   run_finished: 'text-green-400',
   image_finished: 'text-green-400',
+  recheck_finished: 'text-green-400',
   pro_gate_started: 'text-violet-300',
   pro_gate_skipped: 'text-amber-300',
 }

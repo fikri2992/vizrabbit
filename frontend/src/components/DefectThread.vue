@@ -2,7 +2,6 @@
 import SeverityChip from '@/components/SeverityChip.vue'
 
 const TRANSITION_LABELS = {
-  fix_submitted: 'Submit a fix',
   dismissed: 'Dismiss as false positive',
   override_approved: 'Override and approve',
 }
@@ -142,6 +141,13 @@ export default {
 
       <p class="mt-2 text-xs text-neutral-500">
         Defects are resolved by the agent re-checking a fixed version, never by hand.
+      </p>
+    </section>
+
+    <section v-else-if="thread.can_submit_fix" class="border-t border-neutral-800 pt-4">
+      <p class="text-xs text-neutral-500">
+        To close this, upload a fixed version of the image. The agent compares it against
+        the defect and decides — nobody can mark it resolved by hand.
       </p>
     </section>
 

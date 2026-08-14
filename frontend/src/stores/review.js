@@ -125,6 +125,31 @@ export const useReviewStore = defineStore('review', {
       return api.post(`/api/projects/${projectId}/defects/${defectId}/memory`, { description })
     },
 
+    /** Upload a fixed version. The agent decides what that actually resolved. */
+    async submitFix(projectId, imageId, file) {
+      this.uploading = true
+      this.error = ''
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        const response = await fetch(
+          `/api/projects/${projectId}/images/${imageId}/versions`,
+          { method: 'POST', credentials: 'include', body: form },
+        )
+        if (!response.ok) throw new Error(await response.text())
+        return response.json()
+      } catch (error) {
+        this.error = error.message
+        throw error
+      } finally {
+        this.uploading = false
+      }
+    },
+
+    async fetchVersions(projectId, imageId) {
+      return api.get(`/api/projects/${projectId}/images/${imageId}/versions`)
+    },
+
     async approveImage(projectId, imageId) {
       const updated = await api.post(`/api/projects/${projectId}/images/${imageId}/approve`)
       if (this.activeImage?.image.id === imageId) this.activeImage.image = updated

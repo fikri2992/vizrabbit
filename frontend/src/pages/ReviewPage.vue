@@ -22,12 +22,16 @@ export default {
       categories: [],
       showOpenOnly: false,
       notice: '',
+      versions: [],
       allSeverities: SEVERITY_ORDER,
       allCategories: CATEGORIES,
     }
   },
   computed: {
-    ...mapState(useReviewStore, ['activeImage', 'thread', 'activeSummary']),
+    ...mapState(useReviewStore, ['activeImage', 'thread', 'activeSummary', 'uploading']),
+    canSubmitFix() {
+      return useProjectsStore().can('submit_fix')
+    },
     defects() {
       return sortDefects(this.activeImage?.defects || [])
     },
@@ -54,10 +58,13 @@ export default {
     },
   },
   async created() {
-    await useProjectsStore().fetchOne(this.projectId)
-    await this.fetchImage(this.projectId, this.imageId)
-    const first = this.defects[0]
-    if (first) this.select(first)
+    await this.load()
+  },
+  watch: {
+    // Version chips route to a sibling image; the component instance is reused.
+    imageId() {
+      this.load()
+    },
   },
   methods: {
     ...mapActions(useReviewStore, [
@@ -67,7 +74,32 @@ export default {
       'transition',
       'proposeMemoryRule',
       'approveImage',
+      'submitFix',
+      'fetchVersions',
     ]),
+    async load() {
+      this.notice = ''
+      this.selectedId = ''
+      await useProjectsStore().fetchOne(this.projectId)
+      await this.fetchImage(this.projectId, this.imageId)
+      this.versions = await this.fetchVersions(this.projectId, this.imageId)
+      const first = this.defects[0]
+      if (first) await this.select(first)
+    },
+    async onFixSelected(files) {
+      const file = files?.[0]
+      if (!file) return
+      try {
+        const result = await this.submitFix(this.projectId, this.imageId, file)
+        const count = result.submitted.length
+        this.notice = count
+          ? `Version ${result.version.version} uploaded. The agent is re-checking ${count} defect(s).`
+          : `Version ${result.version.version} uploaded. Nothing was open to re-check.`
+        this.versions = await this.fetchVersions(this.projectId, this.imageId)
+      } catch (error) {
+        this.notice = error.message
+      }
+    },
     async select(defect) {
       this.selectedId = defect.id
       await this.openThread(this.projectId, defect.id)
@@ -177,8 +209,22 @@ export default {
         {{ notice }}
       </p>
 
-      <div v-if="canApprove" class="mt-4">
+      <div class="mt-4 flex flex-wrap items-start gap-3">
+        <label
+          v-if="canSubmitFix"
+          class="cursor-pointer rounded border border-neutral-600 px-4 py-2 text-sm font-medium hover:bg-neutral-800"
+        >
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            class="hidden"
+            @change="onFixSelected($event.target.files)"
+          />
+          {{ uploading ? 'Uploading…' : 'Submit fixed version' }}
+        </label>
+
         <button
+          v-if="canApprove"
           type="button"
           :disabled="!everythingClosed || approved"
           class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
@@ -186,10 +232,31 @@ export default {
         >
           {{ approved ? 'Approved' : 'Approve image' }}
         </button>
-        <p v-if="!everythingClosed" class="mt-1.5 text-xs text-neutral-500">
-          Everything must be resolved, dismissed or overridden before you can approve.
-        </p>
       </div>
+
+      <p v-if="canApprove && !everythingClosed" class="mt-1.5 text-xs text-neutral-500">
+        Everything must be resolved, dismissed or overridden before you can approve.
+      </p>
+      <p v-if="canSubmitFix" class="mt-1.5 text-xs text-neutral-500">
+        Uploading a fix does not close anything by itself — the agent re-checks each open
+        defect against the new version and decides.
+      </p>
+
+      <ul v-if="versions.length > 1" class="mt-4 flex flex-wrap gap-2 text-xs">
+        <li v-for="entry in versions" :key="entry.id">
+          <RouterLink
+            :to="{ name: 'review', params: { projectId, imageId: entry.id } }"
+            class="rounded-full px-2.5 py-1 ring-1 ring-inset"
+            :class="
+              entry.id === imageId
+                ? 'bg-neutral-100 text-neutral-900 ring-neutral-100'
+                : 'text-neutral-400 ring-neutral-700 hover:text-neutral-100'
+            "
+          >
+            v{{ entry.version }}
+          </RouterLink>
+        </li>
+      </ul>
 
       <!-- Defect list -->
       <ul class="mt-6 divide-y divide-neutral-800 rounded-lg border border-neutral-800">

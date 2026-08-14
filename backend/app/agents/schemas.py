@@ -84,6 +84,16 @@ class GateVerdict(BaseModel):
     reason: str = Field(default="", description="Brief justification for the changes")
 
 
+class RecheckVerdict(BaseModel):
+    """Whether a submitted fix actually removed the defect it claims to fix."""
+
+    resolved: bool = Field(description="True only if the described defect is gone")
+    reason: str = Field(description="What you see in the AFTER panel, in one sentence")
+    note: str = Field(
+        default="", description="Anything else worth flagging, e.g. a new problem introduced"
+    )
+
+
 class GuidelineQuestion(BaseModel):
     question: str
     why_it_matters: str = Field(default="")

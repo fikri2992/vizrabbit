@@ -11,6 +11,7 @@ from app.api.deps import BlobsDep, BusDep, ProjectDep, StoreDep, UserDep, guard
 from app.domain.entities import DefectRecord, ImageAsset, Run
 from app.domain.permissions import Permission
 from app.infra import repository as repo
+from app.services import recheck as recheck_service
 from app.services import runs as run_service
 
 router = APIRouter(prefix="/api", tags=["runs"])
@@ -101,6 +102,55 @@ async def _image_view(store, blobs, image: ImageAsset) -> ImageView:
         annotated_url=blobs.public_url(image.annotated_path) if image.annotated_path else None,
         gridded_url=blobs.public_url(image.gridded_path) if image.gridded_path else None,
     )
+
+
+class FixSubmitted(BaseModel):
+    version: ImageAsset
+    #: Defects now awaiting the agent's verdict. Nobody closed them by hand.
+    submitted: list[DefectRecord]
+
+
+@router.post("/projects/{project_id}/images/{image_id}/versions", status_code=202)
+async def submit_fix(
+    image_id: str,
+    project: ProjectDep,
+    store: StoreDep,
+    blobs: BlobsDep,
+    bus: BusDep,
+    user: UserDep,
+    background: BackgroundTasks,
+    file: UploadFile,
+) -> FixSubmitted:
+    """Upload a fixed version. The agent re-checks it and decides what is resolved."""
+    guard(project, user, Permission.SUBMIT_FIX)
+
+    original = await repo.load(store, ImageAsset, image_id)
+    if original is None or original.project_id != project.id:
+        raise HTTPException(404, "image not found")
+    if file.content_type not in ACCEPTED_TYPES:
+        raise HTTPException(415, f"unsupported type {file.content_type}")
+
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "larger than 20MB")
+
+    version, submitted = await recheck_service.submit_fix(
+        store, blobs, project, original, user, file.filename or original.filename, data
+    )
+    background.add_task(
+        recheck_service.run_recheck, store, blobs, bus, project, original, version
+    )
+    return FixSubmitted(version=version, submitted=submitted)
+
+
+@router.get("/projects/{project_id}/images/{image_id}/versions")
+async def list_versions(
+    image_id: str, project: ProjectDep, store: StoreDep
+) -> list[ImageAsset]:
+    image = await repo.load(store, ImageAsset, image_id)
+    if image is None or image.project_id != project.id:
+        raise HTTPException(404, "image not found")
+    return await recheck_service.version_history(store, image)
 
 
 # --- live activity feed ---------------------------------------------------

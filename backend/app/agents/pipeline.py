@@ -22,6 +22,7 @@ from app.agents.runtime import bytes_part, run_agent
 from app.agents.schemas import (
     CircleCheck,
     GateVerdict,
+    RecheckVerdict,
     ScanResult,
     Suspect,
     Verdict,
@@ -32,7 +33,7 @@ from app.domain.grid import Grid
 from app.domain.taxonomy import Category, Severity
 from app.imaging.annotate import Annotation, draw_annotations
 from app.imaging.canvas import fit_for_model, to_png_bytes
-from app.imaging.contact_sheet import inspection_sheet
+from app.imaging.contact_sheet import contact_sheet, inspection_sheet
 from app.imaging.crops import zoom_cells
 from app.imaging.grid_overlay import apply_grid
 
@@ -139,6 +140,17 @@ def annotator_agent() -> LlmAgent:
         instruction=prompts.load("annotator"),
         output_schema=CircleCheck,
         output_key="check",
+    )
+
+
+def rechecker_agent() -> LlmAgent:
+    return LlmAgent(
+        model=settings.model_flash,
+        name="rechecker",
+        description="Decides whether a submitted fix removed the defect.",
+        instruction=prompts.load("rechecker"),
+        output_schema=RecheckVerdict,
+        output_key="recheck",
     )
 
 
@@ -267,6 +279,45 @@ async def apply_pro_gate(image: Image.Image, defects: list[Defect], guidelines: 
         prompt=f"Confirmed defects on this image:\n\n{listing}\n\nReview them.",
         images=[bytes_part(to_png_bytes(fit_for_model(annotated)))],
         schema=GateVerdict,
+    )
+
+
+async def recheck_defect(
+    before: Image.Image,
+    after: Image.Image,
+    cells: list[str],
+    comment: str,
+    before_grid: Grid | None = None,
+    after_grid: Grid | None = None,
+) -> RecheckVerdict:
+    """Stage 5 — is this defect gone in the resubmitted version?
+
+    The two versions are cropped through their own grids: a fix is often a fresh
+    generation at a different size, and the cell refs describe *where in the frame*
+    the defect was, not an absolute pixel box.
+    """
+    before_grid = before_grid or Grid.for_image(before.width, before.height)
+    after_grid = after_grid or Grid.for_image(after.width, after.height)
+
+    usable_before = validate_against_grid(cells, before_grid) or before_grid.all_refs()[:1]
+    usable_after = validate_against_grid(cells, after_grid) or after_grid.all_refs()[:1]
+
+    sheet = contact_sheet(
+        [
+            ("BEFORE (defect reported here)", zoom_cells(before, before_grid, usable_before)),
+            ("AFTER (submitted fix)", zoom_cells(after, after_grid, usable_after)),
+        ]
+    )
+
+    return await run_agent(
+        rechecker_agent(),
+        prompt=(
+            f"The reported defect was: {comment}\n"
+            f"It was localised to cells {', '.join(cells)}.\n\n"
+            "Is it still visible in the AFTER panel?"
+        ),
+        images=[bytes_part(to_png_bytes(fit_for_model(sheet)))],
+        schema=RecheckVerdict,
     )
 
 

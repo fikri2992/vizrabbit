@@ -71,7 +71,16 @@ async def transition_defect(
     to: DefectState,
     rationale: str = "",
 ) -> DefectRecord:
-    """Move a defect, enforcing who may make this move and what it requires."""
+    """Move a defect, enforcing who may make this move and what it requires.
+
+    ``fix_submitted`` is deliberately not reachable here: it must carry the version
+    that claims to fix it, or the defect would sit waiting for a re-check that has
+    nothing to check against. Upload a version instead.
+    """
+    if to is DefectState.FIX_SUBMITTED:
+        raise ValueError(
+            "submit a fixed version of the image instead — a fix must have an image to check"
+        )
     require_defect_move(project, user.id, defect.status, to, rationale=rationale or None)
 
     defect.status = to

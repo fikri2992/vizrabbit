@@ -42,7 +42,11 @@ class DefectThread(BaseModel):
     defect: DefectRecord
     comments: list[Comment]
     #: What this caller may do next — the review screen renders exactly these.
+    #: Excludes ``fix_submitted``, which is reached by uploading a version rather
+    #: than by choosing a state, and is surfaced as its own control.
     available_transitions: list[DefectState]
+    #: Whether this caller could fix it by submitting a new version.
+    can_submit_fix: bool = False
 
 
 class RuleProposal(BaseModel):
@@ -70,10 +74,13 @@ async def get_thread(
 ) -> DefectThread:
     defect = await _defect(store, project, defect_id)
     role = project.role_of(user.id)
+    reachable = allowed_transitions(defect.status, role.as_actor())
+
     return DefectThread(
         defect=defect,
         comments=await repo.comments_for_defect(store, defect.id),
-        available_transitions=sorted(allowed_transitions(defect.status, role.as_actor())),
+        available_transitions=sorted(reachable - {DefectState.FIX_SUBMITTED}),
+        can_submit_fix=DefectState.FIX_SUBMITTED in reachable,
     )
 
 

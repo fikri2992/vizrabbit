@@ -304,11 +304,9 @@ async def test_a_defect_thread_lists_comments_and_available_moves(client, projec
     body = client.get(f"/api/projects/{project}/defects/d1").json()
     assert body["defect"]["comment"].startswith("Six fingers")
     assert body["comments"] == []
-    assert set(body["available_transitions"]) == {
-        "fix_submitted",
-        "dismissed",
-        "override_approved",
-    }
+    # fix_submitted is offered as its own upload control, not as a state to pick.
+    assert set(body["available_transitions"]) == {"dismissed", "override_approved"}
+    assert body["can_submit_fix"] is True
 
 
 @pytest.mark.anyio
@@ -318,7 +316,8 @@ async def test_a_reviewer_sees_only_the_moves_they_may_make(client, project, sto
     as_user(client, DESIGNER)
 
     body = client.get(f"/api/projects/{project}/defects/d1").json()
-    assert body["available_transitions"] == ["fix_submitted"]
+    assert body["available_transitions"] == []
+    assert body["can_submit_fix"] is True
 
 
 @pytest.mark.anyio
@@ -509,7 +508,8 @@ async def test_override_approval_requires_a_rationale(client, project, store):
 
 
 @pytest.mark.anyio
-async def test_a_reviewer_submits_a_fix_rather_than_resolving(client, project, store):
+async def test_a_fix_cannot_be_claimed_without_uploading_one(client, project, store):
+    """fix_submitted must carry the version that claims to fix it."""
     await seed_defect(store, project)
     await link_real_members(store, project)
     as_user(client, DESIGNER)
@@ -517,8 +517,30 @@ async def test_a_reviewer_submits_a_fix_rather_than_resolving(client, project, s
     response = client.post(
         f"/api/projects/{project}/defects/d1/transition", json={"to": "fix_submitted"}
     )
-    assert response.status_code == 200
-    assert response.json()["status"] == "fix_submitted"
+    assert response.status_code == 400
+    assert "submit a fixed version" in response.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_uploading_a_fixed_version_sweeps_up_the_open_defects(client, project, store, blobs):
+    """Drives the service directly — the re-check itself needs a live model."""
+    from app.services import recheck as recheck_service
+
+    stored_project = await repo.load(store, Project, project)
+    run = await run_service.create_run(
+        store, blobs, stored_project, User(**OWNER), [("hero.png", png_bytes())]
+    )
+    image = (await repo.images_for_run(store, run.id))[0]
+    await seed_defect(store, project, image_id=image.id)
+
+    version, submitted = await recheck_service.submit_fix(
+        store, blobs, stored_project, image, User(**OWNER), "hero_v2.png", png_bytes()
+    )
+
+    assert version.version == 2
+    assert version.supersedes_id == image.id
+    assert [d.id for d in submitted] == ["d1"]
+    assert (await repo.load(store, DefectRecord, "d1")).status is DefectState.FIX_SUBMITTED
 
 
 @pytest.mark.anyio

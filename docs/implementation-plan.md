@@ -62,15 +62,17 @@ Tasks:
 ## Phase 3 — Lifecycle + differentiators (Aug 24–26)
 
 Tasks:
-- Roles Owner/Reviewer/Viewer, email invite, exactly-one-Owner invariant
-- Defect lifecycle `open → fix_submitted → agent_rechecking → verified_resolved`; Owner-only `dismissed` / `override_approved` (rationale required); re-check agent pass
-- Guideline upload + grilling chat (one Q at a time, clarifications appended, editable)
-- Memory: propose from defect → Owner approves → rule active in Scanner input; collision-grilling (droppable)
-- Mentions + in-app notifications (droppable)
+- [x] Roles Owner/Reviewer/Viewer, email invite, exactly-one-Owner invariant
+- [x] Defect lifecycle `open → fix_submitted → agent_rechecking → verified_resolved`; Owner-only `dismissed` / `override_approved` (rationale required); Re-checker agent, version chain, version chips in the UI
+- [x] Memory: propose from defect → Owner approves → rule active in Scanner input; lexical collision detection returned with the proposal
+- [x] Mentions + in-app notifications
+- [ ] Guideline grilling chat — upload, storage, clarifications and verbatim pass-through to the Scanner all work; the agent that *asks* the questions is not built yet
+
+**Design correction made here**: `fix_submitted` is no longer reachable through the transition endpoint. It has to carry the version that claims to fix it, or a defect waits forever for a re-check with nothing to check against. The API now exposes `can_submit_fix` and the UI renders an upload control rather than a state to choose.
 
 **Gate 3 (quantified):**
-- Lifecycle unit tests: **all role × transition combinations** asserted (full matrix, no gaps); illegal transitions rejected at API layer too
-- Re-check on eval fixtures (5 fixed-image pairs): **≥ 4/5 fixed defects auto-closed**, 0 falsely closed unfixed defects
+- [x] Lifecycle unit tests: all 196 role × transition combinations asserted against an independent allow-list; illegal transitions rejected at the API layer too
+- [~] Re-check correctness: both directions verified against a live model on a synthetic pair (`scripts/check_recheck.py`) — a genuine fix was recognised, an unfixed defect was refused. Still needs the **5 real fixed-image pairs**, which depend on the defective eval set
 - Guideline grilling: uploading the seed brand doc produces **≥ 3 clarifying questions**; answers persist and appear in Scanner input verbatim
 - Memory rule roundtrip: promote → next run on a planted image detects it, comment cites the memory rule id
 - Full demo script executes end-to-end in **≤ 5 minutes** by a human following a written script
