@@ -2,6 +2,7 @@
 import { mapActions, mapState } from 'pinia'
 
 import ActivityFeed from '@/components/ActivityFeed.vue'
+import GuidelinePanel from '@/components/GuidelinePanel.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
 import { summarize } from '@/domain/defects'
 import { useProjectsStore } from '@/stores/projects'
@@ -9,7 +10,7 @@ import { useReviewStore } from '@/stores/review'
 
 export default {
   name: 'ProjectPage',
-  components: { ActivityFeed, SeverityChip },
+  components: { ActivityFeed, GuidelinePanel, SeverityChip },
   props: { projectId: { type: String, required: true } },
   data() {
     return { dragging: false }
@@ -19,6 +20,9 @@ export default {
     ...mapState(useReviewStore, ['images', 'recentActivity', 'streaming', 'uploading', 'error']),
     canUpload() {
       return useProjectsStore().can('upload_images')
+    },
+    canEditGuideline() {
+      return useProjectsStore().can('edit_guideline')
     },
   },
   async created() {
@@ -126,7 +130,10 @@ export default {
         </p>
       </div>
 
-      <ActivityFeed :events="recentActivity" :streaming="streaming" />
+      <div class="space-y-6">
+        <ActivityFeed :events="recentActivity" :streaming="streaming" />
+        <GuidelinePanel :project-id="projectId" :can-edit="canEditGuideline" />
+      </div>
     </div>
   </div>
 </template>

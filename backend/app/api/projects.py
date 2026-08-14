@@ -5,10 +5,12 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.agents.schemas import GuidelineGrilling
 from app.api.deps import ProjectDep, StoreDep, UserDep, guard
-from app.domain.entities import Clarification, Guideline, Member, Project, Role
+from app.domain.entities import Guideline, Member, Project, Role
 from app.domain.permissions import Permission, permissions_for, validate_membership
 from app.infra import repository as repo
+from app.services import guidelines as guideline_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -134,6 +136,24 @@ async def create_guideline(
     return guideline
 
 
+@router.post("/{project_id}/guidelines/{guideline_id}/grill")
+async def grill_guideline(
+    guideline_id: str, project: ProjectDep, store: StoreDep, user: UserDep
+) -> GuidelineGrilling:
+    """Ask the agent what this guideline leaves ambiguous.
+
+    Owner-only, because only the owner can answer — offering the questions to
+    anyone else would just produce unanswerable ones.
+    """
+    guard(project, user, Permission.ANSWER_GRILLING)
+
+    guideline = await repo.load(store, Guideline, guideline_id)
+    if guideline is None or guideline.project_id != project.id:
+        raise HTTPException(404, "guideline not found")
+
+    return await guideline_service.grill(guideline)
+
+
 @router.post("/{project_id}/guidelines/{guideline_id}/clarifications")
 async def answer_clarification(
     guideline_id: str,
@@ -150,11 +170,9 @@ async def answer_clarification(
     if guideline is None or guideline.project_id != project.id:
         raise HTTPException(404, "guideline not found")
 
-    guideline.clarifications.append(
-        Clarification(question=body.question, answer=body.answer, answered_by=user.id)
-    )
-    from app.domain.entities import now
-
-    guideline.updated_at = now()
-    await repo.save(store, guideline)
-    return guideline
+    try:
+        return await guideline_service.answer(
+            store, project, guideline, user, body.question, body.answer
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc

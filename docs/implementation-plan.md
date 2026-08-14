@@ -66,14 +66,14 @@ Tasks:
 - [x] Defect lifecycle `open → fix_submitted → agent_rechecking → verified_resolved`; Owner-only `dismissed` / `override_approved` (rationale required); Re-checker agent, version chain, version chips in the UI
 - [x] Memory: propose from defect → Owner approves → rule active in Scanner input; lexical collision detection returned with the proposal
 - [x] Mentions + in-app notifications
-- [ ] Guideline grilling chat — upload, storage, clarifications and verbatim pass-through to the Scanner all work; the agent that *asks* the questions is not built yet
+- [x] Guideline upload + grilling: the Pro model reads the document, asks 3–6 targeted questions quoting the vague phrase, and the Owner's answers append as clarifications that reach the Scanner verbatim
 
 **Design correction made here**: `fix_submitted` is no longer reachable through the transition endpoint. It has to carry the version that claims to fix it, or a defect waits forever for a re-check with nothing to check against. The API now exposes `can_submit_fix` and the UI renders an upload control rather than a state to choose.
 
 **Gate 3 (quantified):**
 - [x] Lifecycle unit tests: all 196 role × transition combinations asserted against an independent allow-list; illegal transitions rejected at the API layer too
 - [~] Re-check correctness: both directions verified against a live model on a synthetic pair (`scripts/check_recheck.py`) — a genuine fix was recognised, an unfixed defect was refused. Still needs the **5 real fixed-image pairs**, which depend on the defective eval set
-- Guideline grilling: uploading the seed brand doc produces **≥ 3 clarifying questions**; answers persist and appear in Scanner input verbatim
+- [x] Guideline grilling: a realistically vague brand doc produced **5 questions** first pass, and **4 different** ones after those were answered — no repeats (`scripts/check_grilling.py`). Answers persist and reach the Scanner verbatim (covered by integration test)
 - Memory rule roundtrip: promote → next run on a planted image detects it, comment cites the memory rule id
 - Full demo script executes end-to-end in **≤ 5 minutes** by a human following a written script
 
