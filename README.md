@@ -56,6 +56,14 @@ cloud storage is configured, so it cannot be live on a deployment.
 
 ## Run
 
+On Windows, launch both development servers from the repository root:
+
+```bat
+start_dev.bat
+```
+
+Or run them separately:
+
 ```bash
 cd backend && uv sync && uv run uvicorn app.api.main:app --reload --port 8000
 ```
@@ -75,6 +83,12 @@ cd backend && uv run pytest && uv run ruff check .
 
 ```bash
 cd frontend && npm test
+```
+
+Provision the Firestore composite indexes required by repository list queries:
+
+```bash
+cd backend && uv run python -m scripts.sync_firestore_indexes
 ```
 
 Check the wiring end-to-end — real model call, real image, validated structured output:
