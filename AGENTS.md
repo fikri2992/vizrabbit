@@ -59,6 +59,7 @@ pytest for backend; frontend logic worth testing lives in stores/domain helpers 
 
 - `main` stays deployable. Feature branches, small commits, imperative messages.
 - Never commit: `.env`, service-account keys, eval images >5MB (GCS/LFS them).
+- Never deploy to Cloud Run on your own initiative — deploy only when the user explicitly asks. Committing a milestone does not imply deploying it.
 
 ## Golden rules
 
