@@ -43,6 +43,7 @@ export default {
   props: {
     events: { type: Array, default: () => [] },
     streaming: { type: Boolean, default: false },
+    empty: { type: String, default: 'Nothing running. Upload images to watch the agents work.' },
   },
   methods: {
     describe(event) {
@@ -78,7 +79,7 @@ export default {
     </ul>
 
     <p v-else class="px-4 py-6 text-center text-sm text-neutral-500">
-      Nothing running. Upload images to watch the agents work.
+      {{ empty }}
     </p>
   </section>
 </template>

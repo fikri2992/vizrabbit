@@ -93,7 +93,12 @@ export default {
     async onFiles(fileList) {
       const files = Array.from(fileList).filter((file) => file.type.startsWith('image/'))
       if (!files.length) return
-      await this.upload(this.projectId, files)
+      const run = await this.upload(this.projectId, files)
+      // Straight into review — the agent works alongside, not in front of, the user.
+      const first = run?.image_ids?.[0]
+      if (first) {
+        this.$router.push({ name: 'review', params: { projectId: this.projectId, imageId: first } })
+      }
     },
 
     onDrop(event) {

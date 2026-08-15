@@ -132,6 +132,14 @@ export const useReviewStore = defineStore('review', {
       if (['image_finished', 'image_failed', 'run_finished'].includes(event.stage)) {
         this.fetchImages(projectId)
       }
+      // The open image just finished: pull its findings in while the user works.
+      if (
+        ['image_finished', 'image_failed'].includes(event.stage) &&
+        event.detail?.image_id === this.activeImage?.image.id
+      ) {
+        this.fetchImage(projectId, event.detail.image_id)
+        this.fetchDismissals(projectId, event.detail.image_id)
+      }
       // The agent answered a drawn-region question; its verdict may include a new defect.
       if (['thread_answered', 'thread_inspect_failed'].includes(event.stage) && this.activeImage) {
         const imageId = this.activeImage.image.id

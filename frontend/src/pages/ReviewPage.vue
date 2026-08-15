@@ -48,6 +48,7 @@ export default {
       posting: false,
       openOnly: false,
       notice: '',
+      finishedNotice: '',
       versions: [],
       replyDrafts: {},
       tools: TOOLS,
@@ -91,7 +92,19 @@ export default {
     can() {
       return useProjectsStore().can
     },
+    /** The agent has this image on its bench right now. */
+    agentWorking() {
+      return ['queued', 'scanning', 'reviewing'].includes(this.activeImage?.image.status)
+    },
+    /** The narrated feed, scoped to the image on screen. */
+    imageActivity() {
+      return this.recentActivity.filter(
+        (event) => event.detail?.image_id === this.imageId,
+      )
+    },
     statusPill() {
+      if (this.agentWorking) return { label: 'Agent reviewing…', tone: 'violet' }
+      if (this.activeImage?.image.status === 'failed') return { label: 'Failed', tone: 'amber' }
       if (this.activeImage?.image.approved_by) return { label: 'Approved', tone: 'green' }
       const { open, inFlight } = this.activeSummary
       if (inFlight) return { label: 'Agent re-checking', tone: 'violet' }
@@ -108,6 +121,16 @@ export default {
   watch: {
     imageId() {
       this.load()
+    },
+    // The agent finished while the user was drawing or reading — tell them
+    // quietly; the pins have already appeared via the store refetch.
+    agentWorking(now, before) {
+      if (before && !now) {
+        const failed = this.activeImage?.image.status === 'failed'
+        this.finishedNotice = failed
+          ? 'The agent could not finish this image — see Activity.'
+          : `Agent finished — ${this.defects.length} finding${this.defects.length === 1 ? '' : 's'}, ${this.dismissals.length} rejected`
+      }
     },
   },
   async created() {
@@ -137,6 +160,7 @@ export default {
     ]),
     async load() {
       this.notice = ''
+      this.finishedNotice = ''
       this.selectedId = ''
       this.pendingShapes = []
       await useProjectsStore().fetchOne(this.projectId)
@@ -145,6 +169,8 @@ export default {
       this.fetchDismissals(this.projectId, this.imageId)
       this.versions = await this.fetchVersions(this.projectId, this.imageId)
       this.startStream(this.projectId)
+      // Fresh upload: open on the agent's live narration instead of an empty rail.
+      if (this.agentWorking) this.tab = 'activity'
       const first = this.railItems[0]
       if (first) this.select(first)
     },
@@ -503,6 +529,32 @@ export default {
         </nav>
 
         <div class="min-h-0 flex-1 overflow-y-auto">
+          <!-- The agent finished while the user was working — quiet, dismissible -->
+          <div
+            v-if="finishedNotice"
+            class="flex items-center gap-2 border-b border-edge bg-panel px-3 py-2"
+          >
+            <span class="size-1.5 rounded-full" style="background: #9fe1cb" />
+            <span class="min-w-0 truncate text-xs text-neutral-200">{{ finishedNotice }}</span>
+            <button
+              v-if="tab !== 'comments'"
+              type="button"
+              class="ml-auto shrink-0 text-xs text-neutral-400 hover:text-white"
+              @click="((tab = 'comments'), (finishedNotice = ''))"
+            >
+              View
+            </button>
+            <button
+              type="button"
+              class="shrink-0 text-neutral-500 hover:text-white"
+              :class="tab === 'comments' ? 'ml-auto' : ''"
+              aria-label="Dismiss"
+              @click="finishedNotice = ''"
+            >
+              ×
+            </button>
+          </div>
+
           <!-- Comments tab: one rail, agent and humans together -->
           <template v-if="tab === 'comments'">
             <div v-if="railItems.length" class="divide-y divide-neutral-800/70">
@@ -638,13 +690,32 @@ export default {
             </div>
 
             <div v-else class="p-6 text-center text-sm text-neutral-500">
-              Nothing here yet. The agent's findings and your annotations will appear together.
+              <template v-if="agentWorking">
+                The agent is reviewing this image — findings land here as they're confirmed.
+                You can already zoom, draw, and comment.
+              </template>
+              <template v-else>
+                Nothing here yet. The agent's findings and your annotations will appear together.
+              </template>
             </div>
           </template>
 
-          <!-- Activity tab -->
+          <!-- Activity tab: this image's provenance, live while the agent works -->
           <div v-else-if="tab === 'activity'" class="p-3">
-            <ActivityFeed :events="recentActivity" :streaming="streaming" />
+            <div
+              v-if="agentWorking"
+              class="mb-3 flex items-center gap-2 rounded-md border border-edge px-3 py-2"
+            >
+              <span class="size-1.5 animate-pulse rounded-full bg-neutral-300" />
+              <span class="text-xs text-neutral-400">
+                Agent reviewing this image — keep working, it won't interrupt you.
+              </span>
+            </div>
+            <ActivityFeed
+              :events="imageActivity"
+              :streaming="streaming"
+              empty="No agent activity recorded for this image in this session."
+            />
           </div>
 
           <!-- Rejected tab: what the agent considered and threw out -->

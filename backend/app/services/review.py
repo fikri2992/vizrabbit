@@ -10,6 +10,7 @@ from app.domain.entities import (
     Comment,
     DefectRecord,
     ImageAsset,
+    ImageStatus,
     MemoryRule,
     Notification,
     NotificationKind,
@@ -106,6 +107,9 @@ async def approve_image(
 ) -> ImageAsset:
     """ "Approved" means the Brand Owner said so — nothing else sets this."""
     require(project, user.id, Permission.APPROVE_IMAGE)
+
+    if image.status is not ImageStatus.DONE:
+        raise ValueError("the agent has not finished reviewing this image yet")
 
     outstanding = [
         defect

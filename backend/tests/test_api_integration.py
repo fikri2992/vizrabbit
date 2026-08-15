@@ -22,7 +22,7 @@ from app.api.auth import SESSION_USER_KEY
 from app.api.deps import get_blobs, get_store
 from app.api.main import app
 from app.config import settings
-from app.domain.entities import DefectRecord, ImageAsset, Project, User
+from app.domain.entities import DefectRecord, ImageAsset, ImageStatus, Project, User
 from app.domain.lifecycle import DefectState
 from app.domain.taxonomy import Category, Severity
 from app.infra import repository as repo
@@ -570,7 +570,11 @@ async def test_only_the_owner_changes_severity(client, project, store):
 @pytest.mark.anyio
 async def test_an_image_cannot_be_approved_with_defects_outstanding(client, project, store):
     await repo.save(
-        store, ImageAsset(id="i1", project_id=project, run_id="r1", filename="hero.png")
+        store,
+        ImageAsset(
+            id="i1", project_id=project, run_id="r1", filename="hero.png",
+            status=ImageStatus.DONE,
+        ),
     )
     await seed_defect(store, project)
     as_user(client, OWNER)
@@ -583,7 +587,11 @@ async def test_an_image_cannot_be_approved_with_defects_outstanding(client, proj
 @pytest.mark.anyio
 async def test_an_image_is_approved_once_everything_is_closed(client, project, store):
     await repo.save(
-        store, ImageAsset(id="i1", project_id=project, run_id="r1", filename="hero.png")
+        store,
+        ImageAsset(
+            id="i1", project_id=project, run_id="r1", filename="hero.png",
+            status=ImageStatus.DONE,
+        ),
     )
     await seed_defect(store, project)
 
@@ -598,7 +606,11 @@ async def test_an_image_is_approved_once_everything_is_closed(client, project, s
 @pytest.mark.anyio
 async def test_a_reviewer_cannot_approve_an_image(client, project, store):
     await repo.save(
-        store, ImageAsset(id="i1", project_id=project, run_id="r1", filename="hero.png")
+        store,
+        ImageAsset(
+            id="i1", project_id=project, run_id="r1", filename="hero.png",
+            status=ImageStatus.DONE,
+        ),
     )
     await link_real_members(store, project)
     as_user(client, DESIGNER)
@@ -906,3 +918,21 @@ async def test_delete_preview_counts_what_would_die(client, project, store, blob
     assert preview == {
         "versions": 2, "defects": 1, "threads": 1, "comments": 2, "dismissals": 1,
     }
+
+
+@pytest.mark.anyio
+async def test_an_image_cannot_be_approved_while_the_agent_is_still_working(
+    client, project, store
+):
+    await repo.save(
+        store,
+        ImageAsset(
+            id="i9", project_id=project, run_id="r1", filename="wip.png",
+            status=ImageStatus.SCANNING,
+        ),
+    )
+    as_user(client, OWNER)
+
+    response = client.post(f"/api/projects/{project}/images/i9/approve")
+    assert response.status_code == 400
+    assert "not finished" in response.json()["detail"]
