@@ -57,7 +57,7 @@ export default {
 </script>
 
 <template>
-  <aside class="flex h-full flex-col gap-4 overflow-y-auto border-l border-neutral-800 p-5">
+  <div class="flex flex-col gap-4 p-4">
     <header>
       <div class="flex items-center gap-2">
         <span class="text-sm font-semibold">Pin {{ defect.pin }}</span>
@@ -171,5 +171,5 @@ export default {
         Promotes this defect to a standing check on every future scan. The brand owner approves it.
       </p>
     </section>
-  </aside>
+  </div>
 </template>

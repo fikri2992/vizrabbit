@@ -10,6 +10,7 @@ export const useReviewStore = defineStore('review', {
     images: [], // [{ image, defects, original_url, annotated_url, gridded_url }]
     activeImage: null,
     dismissals: [], // what the agent rejected — shown, never hidden
+    threads: [], // human-drawn annotation threads [{ thread, comments }]
     thread: null, // { defect, comments, available_transitions }
     feed: [], // live agent activity
     streaming: false,
@@ -39,6 +40,33 @@ export const useReviewStore = defineStore('review', {
       this.dismissals = await api.get(
         `/api/projects/${projectId}/images/${imageId}/dismissals`,
       )
+    },
+
+    // --- human annotation threads ---
+
+    async fetchThreads(projectId, imageId) {
+      this.threads = await api.get(`/api/projects/${projectId}/images/${imageId}/threads`)
+    },
+
+    /** Draw + comment -> a new anchored thread; optionally hand it to the agent. */
+    async createThread(projectId, imageId, { body, shapes, askAgent }) {
+      const created = await api.post(`/api/projects/${projectId}/images/${imageId}/threads`, {
+        body,
+        shapes,
+        ask_agent: askAgent,
+      })
+      await this.fetchThreads(projectId, imageId)
+      return created
+    },
+
+    async replyThread(projectId, threadId, body) {
+      await api.post(`/api/projects/${projectId}/threads/${threadId}/comments`, { body })
+      if (this.activeImage) await this.fetchThreads(projectId, this.activeImage.image.id)
+    },
+
+    async resolveThread(projectId, threadId, resolved) {
+      await api.post(`/api/projects/${projectId}/threads/${threadId}/resolve`, { resolved })
+      if (this.activeImage) await this.fetchThreads(projectId, this.activeImage.image.id)
     },
 
     async upload(projectId, files) {
@@ -92,6 +120,12 @@ export const useReviewStore = defineStore('review', {
       // An image finishing or failing changes what the dashboard should show.
       if (['image_finished', 'image_failed', 'run_finished'].includes(event.stage)) {
         this.fetchImages(projectId)
+      }
+      // The agent answered a drawn-region question; its verdict may include a new defect.
+      if (['thread_answered', 'thread_inspect_failed'].includes(event.stage) && this.activeImage) {
+        const imageId = this.activeImage.image.id
+        this.fetchThreads(projectId, imageId)
+        this.fetchImage(projectId, imageId)
       }
     },
 

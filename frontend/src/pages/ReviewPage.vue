@@ -1,17 +1,33 @@
 <script>
 import { mapActions, mapState } from 'pinia'
 
-import AnnotatedImage from '@/components/AnnotatedImage.vue'
+import ActivityFeed from '@/components/ActivityFeed.vue'
 import DefectThread from '@/components/DefectThread.vue'
-import DismissalLog from '@/components/DismissalLog.vue'
+import ReviewCanvas from '@/components/ReviewCanvas.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
-import { CATEGORIES, SEVERITY_ORDER, filterDefects, isClear, sortDefects } from '@/domain/defects'
+import { isClear, sortDefects } from '@/domain/defects'
 import { useProjectsStore } from '@/stores/projects'
 import { useReviewStore } from '@/stores/review'
 
+const TOOLS = [
+  { id: 'select', label: 'Select and pan', icon: 'M4 4l7 16 2.5-6.5L20 11z' },
+  { id: 'circle', label: 'Circle', icon: '' },
+  { id: 'rect', label: 'Rectangle', icon: '' },
+  { id: 'arrow', label: 'Arrow', icon: '' },
+  { id: 'path', label: 'Freehand', icon: '' },
+]
+
+const COLORS = ['#E24B4A', '#EF9F27', '#378ADD', '#22C55E', '#E879F9']
+
+const AGENT_STATE_LABEL = {
+  inspecting: 'agent inspecting…',
+  answered: '',
+  failed: 'inspection failed',
+}
+
 export default {
   name: 'ReviewPage',
-  components: { AnnotatedImage, DefectThread, DismissalLog, SeverityChip },
+  components: { ActivityFeed, DefectThread, ReviewCanvas, SeverityChip },
   props: {
     projectId: { type: String, required: true },
     imageId: { type: String, required: true },
@@ -19,13 +35,19 @@ export default {
   data() {
     return {
       selectedId: '',
-      severities: [],
-      categories: [],
-      showOpenOnly: false,
+      tab: 'comments',
+      tool: 'select',
+      color: COLORS[0],
+      pendingShapes: [],
+      composerBody: '',
+      askAgent: false,
+      posting: false,
+      openOnly: false,
       notice: '',
       versions: [],
-      allSeverities: SEVERITY_ORDER,
-      allCategories: CATEGORIES,
+      replyDrafts: {},
+      tools: TOOLS,
+      colors: COLORS,
     }
   },
   computed: {
@@ -35,33 +57,53 @@ export default {
       'activeSummary',
       'uploading',
       'dismissals',
+      'threads',
+      'recentActivity',
+      'streaming',
     ]),
-    canSubmitFix() {
-      return useProjectsStore().can('submit_fix')
-    },
     defects() {
       return sortDefects(this.activeImage?.defects || [])
     },
-    visibleDefects() {
-      const filtered = filterDefects(this.defects, {
-        severities: this.severities,
-        categories: this.categories,
-      })
-      return this.showOpenOnly
-        ? filtered.filter((d) => ['open', 'needs_human_review'].includes(d.status))
-        : filtered
+    /** Defects and human threads as one rail, ordered by pin. */
+    railItems() {
+      const defectItems = this.defects.map((defect) => ({
+        kind: 'defect',
+        id: defect.id,
+        pin: defect.pin,
+        open: ['open', 'needs_human_review'].includes(defect.status),
+        defect,
+      }))
+      const threadItems = this.threads.map(({ thread, comments }) => ({
+        kind: 'thread',
+        id: thread.id,
+        pin: thread.pin,
+        open: !thread.resolved,
+        thread,
+        comments,
+      }))
+      const merged = [...defectItems, ...threadItems].sort((a, b) => a.pin - b.pin)
+      return this.openOnly ? merged.filter((item) => item.open) : merged
     },
-    canApprove() {
-      return useProjectsStore().can('approve_image')
+    can() {
+      return useProjectsStore().can
     },
-    canPropose() {
-      return useProjectsStore().can('propose_memory_rule')
+    statusPill() {
+      if (this.activeImage?.image.approved_by) return { label: 'Approved', tone: 'green' }
+      const { open, inFlight } = this.activeSummary
+      if (inFlight) return { label: 'Agent re-checking', tone: 'violet' }
+      if (open) return { label: 'Needs review', tone: 'amber' }
+      return { label: 'Clear', tone: 'green' }
     },
     everythingClosed() {
       return isClear(this.defects)
     },
     approved() {
       return Boolean(this.activeImage?.image.approved_by)
+    },
+  },
+  watch: {
+    imageId() {
+      this.load()
     },
   },
   async created() {
@@ -71,78 +113,112 @@ export default {
   beforeUnmount() {
     window.removeEventListener('keydown', this.onKey)
   },
-  watch: {
-    // Version chips route to a sibling image; the component instance is reused.
-    imageId() {
-      this.load()
-    },
-  },
   methods: {
     ...mapActions(useReviewStore, [
       'fetchImage',
+      'fetchThreads',
+      'fetchDismissals',
+      'fetchVersions',
       'openThread',
       'comment',
       'transition',
       'proposeMemoryRule',
       'approveImage',
       'submitFix',
-      'fetchVersions',
-      'fetchDismissals',
+      'createThread',
+      'replyThread',
+      'resolveThread',
+      'startStream',
+      'stopStream',
     ]),
     async load() {
       this.notice = ''
       this.selectedId = ''
+      this.pendingShapes = []
       await useProjectsStore().fetchOne(this.projectId)
       await this.fetchImage(this.projectId, this.imageId)
-      this.versions = await this.fetchVersions(this.projectId, this.imageId)
+      this.fetchThreads(this.projectId, this.imageId)
       this.fetchDismissals(this.projectId, this.imageId)
-      const first = this.defects[0]
-      if (first) await this.select(first)
+      this.versions = await this.fetchVersions(this.projectId, this.imageId)
+      this.startStream(this.projectId)
+      const first = this.railItems[0]
+      if (first) this.select(first)
     },
 
-    /** j/k and arrows step through defects without leaving the canvas. */
+    async select(item) {
+      this.selectedId = item.id
+      if (item.kind === 'defect') await this.openThread(this.projectId, item.id)
+    },
+
+    onCanvasSelect(canvasItem) {
+      const item = this.railItems.find((entry) => entry.id === canvasItem.id)
+      if (item) {
+        this.tab = 'comments'
+        this.select(item)
+      }
+    },
+
     onKey(event) {
       const tag = event.target.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-
-      const list = this.visibleDefects
-      if (!list.length) return
-
       const step = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[event.key]
-      if (!step) return
-
-      event.preventDefault()
-      const current = list.findIndex((defect) => defect.id === this.selectedId)
-      const next = current === -1 ? 0 : (current + step + list.length) % list.length
-      this.select(list[next])
-      this.$refs.canvas?.centerOn?.(
-        { cx: list[next].circle.cx, cy: list[next].circle.cy },
-        1,
-      )
-    },
-    async onFixSelected(files) {
-      const file = files?.[0]
-      if (!file) return
-      try {
-        const result = await this.submitFix(this.projectId, this.imageId, file)
-        const count = result.submitted.length
-        this.notice = count
-          ? `Version ${result.version.version} uploaded. The agent is re-checking ${count} defect(s).`
-          : `Version ${result.version.version} uploaded. Nothing was open to re-check.`
-        this.versions = await this.fetchVersions(this.projectId, this.imageId)
-      } catch (error) {
-        this.notice = error.message
+      if (step) {
+        const list = this.railItems
+        if (!list.length) return
+        event.preventDefault()
+        const current = list.findIndex((item) => item.id === this.selectedId)
+        const next = current === -1 ? 0 : (current + step + list.length) % list.length
+        this.select(list[next])
+        return
+      }
+      const tool = { v: 'select', c: 'circle', r: 'rect', a: 'arrow', p: 'path' }[event.key]
+      if (tool && this.can('comment')) this.tool = tool
+      if (event.key === 'Escape') {
+        this.tool = 'select'
+        this.pendingShapes = []
       }
     },
-    async select(defect) {
-      this.selectedId = defect.id
-      await this.openThread(this.projectId, defect.id)
+
+    onShape(shape) {
+      this.pendingShapes.push(shape)
+      // One deliberate shape per gesture; freehand stays armed for multi-stroke.
+      if (this.tool !== 'path') this.tool = 'select'
+      this.$refs.composer?.focus()
     },
-    toggle(list, value) {
-      const index = this[list].indexOf(value)
-      if (index === -1) this[list].push(value)
-      else this[list].splice(index, 1)
+
+    async postThread() {
+      if (!this.composerBody.trim() || !this.pendingShapes.length) return
+      this.posting = true
+      this.notice = ''
+      try {
+        const created = await this.createThread(this.projectId, this.imageId, {
+          body: this.composerBody,
+          shapes: this.pendingShapes,
+          askAgent: this.askAgent,
+        })
+        this.composerBody = ''
+        this.pendingShapes = []
+        this.askAgent = false
+        this.tab = 'comments'
+        this.selectedId = created.thread.id
+      } catch (error) {
+        this.notice = error.message
+      } finally {
+        this.posting = false
+      }
     },
+
+    async sendReply(item) {
+      const body = (this.replyDrafts[item.id] || '').trim()
+      if (!body) return
+      await this.replyThread(this.projectId, item.id, body)
+      this.replyDrafts[item.id] = ''
+    },
+
+    agentStateLabel(thread) {
+      return AGENT_STATE_LABEL[thread.agent_state] ?? ''
+    },
+
     async onComment(body) {
       await this.comment(this.projectId, this.selectedId, body)
     },
@@ -157,7 +233,7 @@ export default {
     async onProposeMemory(description) {
       const proposal = await this.proposeMemoryRule(this.projectId, this.selectedId, description)
       this.notice = proposal.collisions.length
-        ? `Proposed, but it overlaps ${proposal.collisions.length} existing rule(s) — the owner will be asked to resolve the conflict.`
+        ? `Proposed — overlaps ${proposal.collisions.length} existing rule(s); the owner will reconcile.`
         : 'Proposed. The brand owner approves it before it takes effect.'
     },
     async onApprove() {
@@ -168,86 +244,77 @@ export default {
         this.notice = error.message
       }
     },
+    async onFixSelected(files) {
+      const file = files?.[0]
+      if (!file) return
+      try {
+        const result = await this.submitFix(this.projectId, this.imageId, file)
+        const count = result.submitted.length
+        this.notice = count
+          ? `Version ${result.version.version} uploaded — the agent is re-checking ${count} defect(s).`
+          : `Version ${result.version.version} uploaded. Nothing was open to re-check.`
+        this.versions = await this.fetchVersions(this.projectId, this.imageId)
+      } catch (error) {
+        this.notice = error.message
+      }
+    },
+    when(value) {
+      return new Date(value).toLocaleString()
+    },
   },
 }
 </script>
 
 <template>
-  <div v-if="activeImage" class="grid h-full lg:grid-cols-[1fr_24rem]">
-    <!-- Canvas -->
-    <div class="overflow-y-auto p-6">
-      <header class="mb-4 flex flex-wrap items-center gap-3">
+  <div v-if="activeImage" class="flex h-[calc(100vh-53px)] flex-col">
+    <!-- Top bar -->
+    <header class="flex items-center gap-3 border-b border-neutral-800 px-4 py-2">
+      <RouterLink
+        :to="{ name: 'project', params: { projectId } }"
+        class="text-neutral-400 hover:text-neutral-100"
+        aria-label="Back to project"
+      >
+        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </RouterLink>
+
+      <h2 class="truncate text-sm font-semibold">{{ activeImage.image.filename }}</h2>
+
+      <span
+        class="rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
+        :class="{
+          'bg-green-500/15 text-green-300 ring-green-500/40': statusPill.tone === 'green',
+          'bg-amber-500/15 text-amber-300 ring-amber-500/40': statusPill.tone === 'amber',
+          'bg-violet-500/15 text-violet-300 ring-violet-500/40': statusPill.tone === 'violet',
+        }"
+      >
+        {{ statusPill.label }}
+      </span>
+
+      <div v-if="versions.length > 1" class="flex items-center gap-1">
         <RouterLink
-          :to="{ name: 'project', params: { projectId } }"
-          class="text-sm text-neutral-400 hover:text-neutral-100"
+          v-for="entry in versions"
+          :key="entry.id"
+          :to="{ name: 'review', params: { projectId, imageId: entry.id } }"
+          class="rounded-full px-2 py-0.5 font-mono text-xs ring-1 ring-inset"
+          :class="
+            entry.id === imageId
+              ? 'bg-neutral-100 text-neutral-900 ring-neutral-100'
+              : 'text-neutral-400 ring-neutral-700 hover:text-neutral-100'
+          "
         >
-          ← Back
+          v{{ entry.version }}
         </RouterLink>
-        <h2 class="font-semibold">{{ activeImage.image.filename }}</h2>
-        <SeverityChip v-if="approved" :category="'Approved'" />
-
-        <div class="ml-auto flex items-center gap-3 text-xs text-neutral-400">
-          <span>{{ activeSummary.open }} open</span>
-          <span>{{ activeSummary.inFlight }} in flight</span>
-          <span>{{ activeSummary.closed }} closed</span>
-        </div>
-      </header>
-
-      <!-- Filters -->
-      <div class="mb-4 flex flex-wrap items-center gap-2 text-xs">
-        <button
-          v-for="severity in allSeverities"
-          :key="severity"
-          type="button"
-          class="rounded-full px-2.5 py-1 ring-1 ring-inset transition"
-          :class="
-            severities.includes(severity)
-              ? 'bg-neutral-100 text-neutral-900 ring-neutral-100'
-              : 'text-neutral-400 ring-neutral-700 hover:text-neutral-100'
-          "
-          @click="toggle('severities', severity)"
-        >
-          {{ severity }}
-        </button>
-        <span class="mx-1 text-neutral-700">|</span>
-        <button
-          v-for="category in allCategories"
-          :key="category"
-          type="button"
-          class="rounded-full px-2.5 py-1 ring-1 ring-inset transition"
-          :class="
-            categories.includes(category)
-              ? 'bg-neutral-100 text-neutral-900 ring-neutral-100'
-              : 'text-neutral-400 ring-neutral-700 hover:text-neutral-100'
-          "
-          @click="toggle('categories', category)"
-        >
-          {{ category }}
-        </button>
-        <label class="ml-2 flex items-center gap-1.5 text-neutral-400">
-          <input v-model="showOpenOnly" type="checkbox" class="accent-neutral-100" />
-          Open only
-        </label>
       </div>
 
-      <AnnotatedImage
-        ref="canvas"
-        :src="activeImage.original_url"
-        :width="activeImage.image.width"
-        :height="activeImage.image.height"
-        :defects="visibleDefects"
-        :selected-id="selectedId"
-        @select="select"
-      />
+      <div class="ml-auto flex items-center gap-3 text-xs text-neutral-400">
+        <span>{{ activeSummary.open }} open</span>
+        <span>{{ activeSummary.closed }} closed</span>
 
-      <p v-if="notice" class="mt-3 rounded bg-neutral-800/70 p-2 text-sm text-neutral-200">
-        {{ notice }}
-      </p>
-
-      <div class="mt-4 flex flex-wrap items-start gap-3">
         <label
-          v-if="canSubmitFix"
-          class="cursor-pointer rounded border border-neutral-600 px-4 py-2 text-sm font-medium hover:bg-neutral-800"
+          v-if="can('submit_fix')"
+          class="cursor-pointer rounded border border-neutral-600 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-800"
         >
           <input
             type="file"
@@ -255,89 +322,325 @@ export default {
             class="hidden"
             @change="onFixSelected($event.target.files)"
           />
-          {{ uploading ? 'Uploading…' : 'Submit fixed version' }}
+          {{ uploading ? 'Uploading…' : 'Submit fix' }}
         </label>
 
         <button
-          v-if="canApprove"
+          v-if="can('approve_image')"
           type="button"
           :disabled="!everythingClosed || approved"
-          class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          class="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           @click="onApprove"
         >
-          {{ approved ? 'Approved' : 'Approve image' }}
+          {{ approved ? 'Approved' : 'Approve' }}
         </button>
       </div>
+    </header>
 
-      <p v-if="canApprove && !everythingClosed" class="mt-1.5 text-xs text-neutral-500">
-        Everything must be resolved, dismissed or overridden before you can approve.
-      </p>
-      <p v-if="canSubmitFix" class="mt-1.5 text-xs text-neutral-500">
-        Uploading a fix does not close anything by itself — the agent re-checks each open
-        defect against the new version and decides.
-      </p>
+    <div class="grid min-h-0 flex-1 lg:grid-cols-[1fr_23rem]">
+      <!-- Canvas column -->
+      <div class="flex min-h-0 flex-col gap-2 overflow-y-auto p-4">
+        <div class="relative">
+          <ReviewCanvas
+            ref="canvas"
+            :src="activeImage.original_url"
+            :width="activeImage.image.width"
+            :height="activeImage.image.height"
+            :defects="defects"
+            :threads="threads"
+            :pending-shapes="pendingShapes"
+            :tool="tool"
+            :color="color"
+            :selected-id="selectedId"
+            @select="onCanvasSelect"
+            @shape="onShape"
+          />
 
-      <ul v-if="versions.length > 1" class="mt-4 flex flex-wrap gap-2 text-xs">
-        <li v-for="entry in versions" :key="entry.id">
-          <RouterLink
-            :to="{ name: 'review', params: { projectId, imageId: entry.id } }"
-            class="rounded-full px-2.5 py-1 ring-1 ring-inset"
-            :class="
-              entry.id === imageId
-                ? 'bg-neutral-100 text-neutral-900 ring-neutral-100'
-                : 'text-neutral-400 ring-neutral-700 hover:text-neutral-100'
-            "
+          <!-- Drawing toolbar -->
+          <div
+            v-if="can('comment')"
+            class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-neutral-700 bg-neutral-900/90 p-1 backdrop-blur"
           >
-            v{{ entry.version }}
-          </RouterLink>
-        </li>
-      </ul>
+            <button
+              v-for="entry in tools"
+              :key="entry.id"
+              type="button"
+              class="rounded p-1.5 transition"
+              :class="tool === entry.id ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-neutral-100'"
+              :aria-label="entry.label"
+              :title="entry.label"
+              @click="tool = entry.id"
+            >
+              <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path v-if="entry.id === 'select'" :d="entry.icon" stroke-linejoin="round" />
+                <circle v-else-if="entry.id === 'circle'" cx="12" cy="12" r="8" />
+                <rect v-else-if="entry.id === 'rect'" x="4" y="6" width="16" height="12" rx="1" />
+                <path v-else-if="entry.id === 'arrow'" d="M5 19L19 5m0 0h-8m8 0v8" stroke-linecap="round" stroke-linejoin="round" />
+                <path v-else d="M4 17c3-6 5 4 8-3s5 1 8-5" stroke-linecap="round" />
+              </svg>
+            </button>
 
-      <!-- Defect list -->
-      <ul class="mt-6 divide-y divide-neutral-800 rounded-lg border border-neutral-800">
-        <li v-for="defect in visibleDefects" :key="defect.id">
-          <button
-            type="button"
-            class="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-neutral-900"
-            :class="selectedId === defect.id ? 'bg-neutral-900' : ''"
-            @click="select(defect)"
-          >
-            <span class="mt-0.5 font-mono text-xs text-neutral-500">{{ defect.pin }}</span>
-            <span class="flex-1">
-              <span class="block text-sm">{{ defect.comment }}</span>
-              <span class="mt-1 flex flex-wrap items-center gap-1.5">
-                <SeverityChip :severity="defect.severity" />
-                <SeverityChip :status="defect.status" />
-                <span class="text-xs text-neutral-500">{{ defect.cells.join(', ') }}</span>
-              </span>
+            <span class="mx-1 h-5 w-px bg-neutral-700" />
+
+            <button
+              v-for="swatch in colors"
+              :key="swatch"
+              type="button"
+              class="p-1.5"
+              :aria-label="`Colour ${swatch}`"
+              @click="color = swatch"
+            >
+              <span
+                class="block size-3.5 rounded-full ring-2 transition"
+                :style="{ background: swatch }"
+                :class="color === swatch ? 'ring-white' : 'ring-transparent'"
+              />
+            </button>
+          </div>
+        </div>
+
+        <!-- Composer: every comment anchors to a drawing -->
+        <div v-if="can('comment')" class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-2">
+          <div class="flex items-center gap-2">
+            <span
+              v-if="pendingShapes.length"
+              class="flex items-center gap-1.5 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs text-blue-300 ring-1 ring-inset ring-blue-500/40"
+            >
+              {{ pendingShapes.length }} drawing{{ pendingShapes.length > 1 ? 's' : '' }} attached
+              <button type="button" class="hover:text-white" aria-label="Clear drawings" @click="pendingShapes = []">×</button>
             </span>
-          </button>
-        </li>
-      </ul>
+            <span v-else class="text-xs text-neutral-500">
+              Pick a tool and draw on the image to anchor your comment
+            </span>
+          </div>
 
-      <p v-if="!visibleDefects.length" class="mt-4 text-sm text-neutral-500">
-        No defects match these filters.
-      </p>
+          <div class="mt-2 flex items-end gap-2">
+            <textarea
+              ref="composer"
+              v-model="composerBody"
+              rows="1"
+              placeholder="Leave a comment…"
+              class="min-h-9 flex-1 resize-none rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+              @keydown.enter.exact.prevent="postThread"
+            />
 
-      <div class="mt-4">
-        <DismissalLog :dismissals="dismissals" />
+            <button
+              v-if="can('ask_agent')"
+              type="button"
+              class="flex items-center gap-1.5 rounded border px-3 py-2 text-xs font-medium transition"
+              :class="
+                askAgent
+                  ? 'border-violet-500 bg-violet-500/15 text-violet-300'
+                  : 'border-neutral-700 text-neutral-400 hover:text-neutral-100'
+              "
+              @click="askAgent = !askAgent"
+            >
+              <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" stroke-linejoin="round" />
+              </svg>
+              Ask agent
+            </button>
+
+            <button
+              type="button"
+              :disabled="posting || !composerBody.trim() || !pendingShapes.length"
+              class="rounded bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-900 disabled:opacity-40"
+              @click="postThread"
+            >
+              {{ posting ? 'Posting…' : 'Post' }}
+            </button>
+          </div>
+
+          <p v-if="askAgent" class="mt-1.5 text-xs text-violet-300/80">
+            The agent will inspect the drawn region, reply in this thread, and file a defect if it
+            confirms one.
+          </p>
+        </div>
+
+        <p v-if="notice" class="rounded bg-neutral-800/70 p-2 text-sm text-neutral-200">{{ notice }}</p>
+
+        <p class="text-xs text-neutral-600">
+          <kbd class="rounded border border-neutral-700 px-1">c</kbd> circle
+          <kbd class="ml-1 rounded border border-neutral-700 px-1">r</kbd> rect
+          <kbd class="ml-1 rounded border border-neutral-700 px-1">a</kbd> arrow
+          <kbd class="ml-1 rounded border border-neutral-700 px-1">p</kbd> pen
+          <kbd class="ml-1 rounded border border-neutral-700 px-1">j/k</kbd> next/prev
+          · scroll to zoom · drag to pan
+        </p>
       </div>
 
-      <p class="mt-3 text-xs text-neutral-600">
-        <kbd class="rounded border border-neutral-700 px-1">j</kbd> /
-        <kbd class="rounded border border-neutral-700 px-1">k</kbd> to step through defects ·
-        scroll to zoom · drag to pan
-      </p>
-    </div>
+      <!-- Rail -->
+      <aside class="flex min-h-0 flex-col border-l border-neutral-800">
+        <nav class="flex gap-4 border-b border-neutral-800 px-4 pt-3 text-sm">
+          <button
+            v-for="entry in [
+              { id: 'comments', label: `Comments ${railItems.length}` },
+              { id: 'activity', label: 'Activity' },
+              { id: 'rejected', label: `Rejected ${dismissals.length}` },
+            ]"
+            :key="entry.id"
+            type="button"
+            class="border-b-2 pb-2 transition"
+            :class="
+              tab === entry.id
+                ? 'border-neutral-100 font-medium text-neutral-100'
+                : 'border-transparent text-neutral-500 hover:text-neutral-300'
+            "
+            @click="tab = entry.id"
+          >
+            {{ entry.label }}
+          </button>
 
-    <DefectThread
-      v-if="thread"
-      :thread="thread"
-      :can-propose="canPropose"
-      @comment="onComment"
-      @transition="onTransition"
-      @propose-memory="onProposeMemory"
-    />
+          <label v-if="tab === 'comments'" class="ml-auto flex items-center gap-1.5 pb-2 text-xs text-neutral-500">
+            <input v-model="openOnly" type="checkbox" class="accent-neutral-100" />
+            Open only
+          </label>
+        </nav>
+
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <!-- Comments tab: one rail, agent and humans together -->
+          <template v-if="tab === 'comments'">
+            <div v-if="railItems.length" class="space-y-2 p-3">
+              <article
+                v-for="item in railItems"
+                :key="item.id"
+                class="cursor-pointer rounded-lg border transition"
+                :class="
+                  selectedId === item.id
+                    ? 'border-neutral-500 bg-neutral-900'
+                    : 'border-neutral-800 hover:border-neutral-700'
+                "
+                @click="select(item)"
+              >
+                <!-- Agent defect -->
+                <template v-if="item.kind === 'defect'">
+                  <div class="flex items-center gap-2 px-3 pt-2.5">
+                    <span class="flex size-5 items-center justify-center rounded-full bg-violet-500/20 text-violet-300">
+                      <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="5" y="8" width="14" height="10" rx="2" />
+                        <path d="M12 4v4M9 13h.01M15 13h.01" stroke-linecap="round" />
+                      </svg>
+                    </span>
+                    <span class="text-xs font-medium">QA agent</span>
+                    <SeverityChip :severity="item.defect.severity" />
+                    <SeverityChip :status="item.defect.status" />
+                    <span class="ml-auto font-mono text-xs text-neutral-500">{{ item.pin }}</span>
+                  </div>
+                  <p class="px-3 pb-2.5 pt-1.5 text-sm text-neutral-200">{{ item.defect.comment }}</p>
+
+                  <div
+                    v-if="selectedId === item.id && thread && thread.defect.id === item.id"
+                    class="border-t border-neutral-800"
+                    @click.stop
+                  >
+                    <DefectThread
+                      :thread="thread"
+                      :can-propose="can('propose_memory_rule')"
+                      @comment="onComment"
+                      @transition="onTransition"
+                      @propose-memory="onProposeMemory"
+                    />
+                  </div>
+                </template>
+
+                <!-- Human thread -->
+                <template v-else>
+                  <div class="flex items-center gap-2 px-3 pt-2.5">
+                    <span
+                      class="flex size-5 items-center justify-center rounded-full text-[10px] font-semibold text-black"
+                      :style="{ background: item.thread.shapes[0]?.color || '#378ADD' }"
+                    >
+                      {{ (item.thread.author_name || '?').slice(0, 1).toUpperCase() }}
+                    </span>
+                    <span class="text-xs font-medium">{{ item.thread.author_name }}</span>
+                    <span
+                      v-if="item.thread.resolved"
+                      class="rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-300 ring-1 ring-inset ring-green-500/40"
+                    >
+                      Resolved
+                    </span>
+                    <span
+                      v-if="agentStateLabel(item.thread)"
+                      class="text-xs text-violet-300"
+                    >
+                      {{ agentStateLabel(item.thread) }}
+                    </span>
+                    <span class="ml-auto font-mono text-xs text-neutral-500">{{ item.pin }}</span>
+                  </div>
+
+                  <div class="space-y-2 px-3 py-2">
+                    <div v-for="entry in item.comments" :key="entry.id" class="text-sm">
+                      <div class="flex items-baseline gap-2">
+                        <span class="text-xs font-medium" :class="entry.is_agent ? 'text-violet-300' : ''">
+                          {{ entry.author_name }}
+                        </span>
+                        <span class="text-[11px] text-neutral-600">{{ when(entry.created_at) }}</span>
+                      </div>
+                      <p class="mt-0.5 whitespace-pre-wrap text-neutral-300">{{ entry.body }}</p>
+                    </div>
+                  </div>
+
+                  <div v-if="selectedId === item.id" class="border-t border-neutral-800 p-2.5" @click.stop>
+                    <div class="flex gap-2">
+                      <input
+                        v-model="replyDrafts[item.id]"
+                        placeholder="Reply…"
+                        class="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-sm outline-none focus:border-neutral-500"
+                        @keydown.enter.prevent="sendReply(item)"
+                      />
+                      <button
+                        type="button"
+                        class="rounded border border-neutral-700 px-2.5 text-xs hover:bg-neutral-800"
+                        @click="sendReply(item)"
+                      >
+                        Reply
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      class="mt-2 text-xs text-neutral-500 hover:text-neutral-200"
+                      @click="resolveThread(projectId, item.id, !item.thread.resolved)"
+                    >
+                      {{ item.thread.resolved ? 'Reopen thread' : 'Mark resolved' }}
+                    </button>
+                  </div>
+                </template>
+              </article>
+            </div>
+
+            <div v-else class="p-6 text-center text-sm text-neutral-500">
+              Nothing here yet. The agent's findings and your annotations will appear together.
+            </div>
+          </template>
+
+          <!-- Activity tab -->
+          <div v-else-if="tab === 'activity'" class="p-3">
+            <ActivityFeed :events="recentActivity" :streaming="streaming" />
+          </div>
+
+          <!-- Rejected tab: what the agent considered and threw out -->
+          <div v-else class="p-3">
+            <p class="mb-3 text-xs text-neutral-500">
+              Regions the scanner flagged that did not survive a closer look — kept so you can judge
+              how careful the agent is being.
+            </p>
+            <ul v-if="dismissals.length" class="space-y-3">
+              <li v-for="dismissal in dismissals" :key="dismissal.id" class="text-sm">
+                <div class="flex items-baseline gap-2">
+                  <span class="font-mono text-xs text-neutral-500">{{ dismissal.cells.join(', ') }}</span>
+                  <span class="text-xs text-neutral-600">{{ dismissal.stage === 'pro_gate' ? 'Final review' : 'Inspector' }}</span>
+                </div>
+                <p v-if="dismissal.hypothesis" class="mt-0.5 text-neutral-500">
+                  Suspected: {{ dismissal.hypothesis }}
+                </p>
+                <p class="mt-0.5 text-neutral-300">{{ dismissal.reason }}</p>
+              </li>
+            </ul>
+            <p v-else class="text-sm text-neutral-500">Nothing was rejected on this image.</p>
+          </div>
+        </div>
+      </aside>
+    </div>
   </div>
 
   <p v-else class="p-10 text-sm text-neutral-500">Loading…</p>
