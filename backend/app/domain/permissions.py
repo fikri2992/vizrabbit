@@ -31,6 +31,8 @@ class Permission(StrEnum):
     OVERRIDE_SEVERITY = "override_severity"
     MANAGE_MEMBERS = "manage_members"
     EDIT_GUIDELINE = "edit_guideline"
+    #: Removes the whole version lineage and its records — an accountability decision.
+    DELETE_IMAGE = "delete_image"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {

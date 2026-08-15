@@ -84,6 +84,22 @@ async def list_images(
     return [await _image_view(store, blobs, image) for image in images]
 
 
+@router.delete("/projects/{project_id}/images/{image_id}", status_code=204)
+async def delete_image(
+    image_id: str,
+    project: ProjectDep,
+    store: StoreDep,
+    blobs: BlobsDep,
+    user: UserDep,
+) -> None:
+    """Owner removes an upload — the whole version lineage and its records go with it."""
+    guard(project, user, Permission.DELETE_IMAGE)
+    image = await repo.load(store, ImageAsset, image_id)
+    if image is None or image.project_id != project.id:
+        raise HTTPException(404, "image not found")
+    await run_service.delete_image(store, blobs, project, user, image)
+
+
 @router.get("/projects/{project_id}/images/{image_id}")
 async def get_image(
     image_id: str, project: ProjectDep, store: StoreDep, blobs: BlobsDep

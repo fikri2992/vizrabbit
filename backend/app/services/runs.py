@@ -14,6 +14,7 @@ from app.agents import prompts
 from app.agents.pipeline import ImageReport, process_image
 from app.domain.entities import (
     Circle,
+    Comment,
     DefectRecord,
     DismissalRecord,
     ImageAsset,
@@ -21,6 +22,7 @@ from app.domain.entities import (
     NotificationKind,
     Project,
     Region,
+    ReviewThread,
     Run,
     RunStatus,
     User,
@@ -40,6 +42,37 @@ from app.services.review import notify
 
 def new_id() -> str:
     return uuid4().hex
+
+
+async def delete_image(
+    store: Store, blobs: BlobStore, project: Project, user: User, image: ImageAsset
+) -> list[str]:
+    """Owner removes an upload: the whole version lineage and every record on it.
+
+    This is the one place records die with their image — dismissals and comments
+    are never deleted while the image they belong to exists.
+    """
+    from app.services.recheck import version_history
+
+    require(project, user.id, Permission.DELETE_IMAGE)
+
+    lineage = await version_history(store, image)
+    for asset in lineage:
+        for defect in await repo.defects_for_image(store, asset.id):
+            for comment in await repo.comments_for_defect(store, defect.id):
+                await repo.delete(store, Comment, comment.id)
+            await repo.delete(store, DefectRecord, defect.id)
+        for thread in await repo.threads_for_image(store, asset.id):
+            for comment in await repo.comments_for_defect(store, thread.id):
+                await repo.delete(store, Comment, comment.id)
+            await repo.delete(store, ReviewThread, thread.id)
+        for dismissal in await repo.dismissals_for_image(store, asset.id):
+            await repo.delete(store, DismissalRecord, dismissal.id)
+        for path in (asset.original_path, asset.gridded_path, asset.annotated_path):
+            if path:
+                await blobs.delete(path)
+        await repo.delete(store, ImageAsset, asset.id)
+    return [asset.id for asset in lineage]
 
 
 async def assemble_guidelines(store: Store, project_id: str) -> str:

@@ -26,6 +26,7 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 | **Review thread** | A human-anchored annotation: drawn shapes (circle/rect/arrow/freehand) + a comment, pinned to the image. Shares one pin sequence with defects. Frame.io model: every comment is anchored. |
 | **Ask agent** | A review thread flagged for inspection: the drawn region maps to grid cells, the Inspector runs on that crop with the human's question as hypothesis, and replies in the thread. A confirmed finding becomes a real defect carrying the thread's pin. |
 | **Brand Owner** | The one accountable member per project. Answers grilling, gates memory promotion, controls approval/overrides, owns false positives. |
+| **Delete image** | Owner-only. Removes an upload's whole version lineage — assets, defects, threads, comments, dismissals, blobs. The one place records die with their image; "dismissals are never deleted" holds while the image exists. |
 
 ## Agents (ADK)
 

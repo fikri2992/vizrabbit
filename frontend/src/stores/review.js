@@ -69,6 +69,12 @@ export const useReviewStore = defineStore('review', {
       if (this.activeImage) await this.fetchThreads(projectId, this.activeImage.image.id)
     },
 
+    /** Owner removes an upload; the whole version lineage goes with it. */
+    async deleteImage(projectId, imageId) {
+      await api.del(`/api/projects/${projectId}/images/${imageId}`)
+      await this.fetchImages(projectId)
+    },
+
     async upload(projectId, files) {
       this.uploading = true
       this.error = ''

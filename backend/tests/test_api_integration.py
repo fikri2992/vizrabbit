@@ -806,3 +806,92 @@ def test_the_event_stream_is_closed_to_non_members(client, project):
 # rather than failing. Event delivery is covered by tests/test_events_and_storage.py
 # against the real bus, and the HTTP stream end-to-end by scripts/check_sse.py
 # against a real uvicorn server.
+
+
+# --- image deletion -------------------------------------------------------
+
+
+async def seed_image_lineage(store, blobs, project_id):
+    """A two-version lineage with a defect, dismissal, thread, and real blobs."""
+    from app.domain.annotations import Shape, ShapeKind
+    from app.domain.entities import Comment, DismissalRecord, ReviewThread, Run
+
+    await repo.save(
+        store, Run(id="r1", project_id=project_id, started_by=OWNER["id"], image_ids=["i1"])
+    )
+    v1 = ImageAsset(
+        id="i1", project_id=project_id, run_id="r1", filename="hero.png", width=400, height=400
+    )
+    v1.original_path = await blobs.write("p/i1/original.png", png_bytes())
+    await repo.save(store, v1)
+    v2 = ImageAsset(
+        id="i2", project_id=project_id, run_id="r1", filename="hero.png",
+        version=2, supersedes_id="i1", width=400, height=400,
+    )
+    v2.original_path = await blobs.write("p/i2/original.png", png_bytes((30, 200, 30)))
+    await repo.save(store, v2)
+
+    await seed_defect(store, project_id, image_id="i1")
+    await repo.save(
+        store,
+        Comment(id="c1", project_id=project_id, defect_id="d1", author_id=OWNER["id"], body="hm"),
+    )
+    await repo.save(
+        store,
+        DismissalRecord(
+            id="x1", project_id=project_id, image_id="i1",
+            cells=["A1"], hypothesis="h", reason="fine", stage="inspector",
+        ),
+    )
+    await repo.save(
+        store,
+        ReviewThread(
+            id="t1", project_id=project_id, image_id="i2", pin=2, author_id=OWNER["id"],
+            shapes=[Shape(kind=ShapeKind.RECT, points=[10, 10, 50, 50], color="#E24B4A")],
+        ),
+    )
+    await repo.save(
+        store,
+        Comment(id="c2", project_id=project_id, defect_id="t1", author_id=OWNER["id"], body="?"),
+    )
+
+
+@pytest.mark.anyio
+async def test_deleting_an_image_removes_its_whole_lineage_and_records(
+    client, project, store, blobs
+):
+    from app.domain.entities import Comment, DismissalRecord, ReviewThread
+
+    await seed_image_lineage(store, blobs, project)
+    as_user(client, OWNER)
+
+    assert client.delete(f"/api/projects/{project}/images/i2").status_code == 204
+
+    assert await repo.load(store, ImageAsset, "i1") is None
+    assert await repo.load(store, ImageAsset, "i2") is None
+    assert await repo.load(store, DefectRecord, "d1") is None
+    assert await repo.load(store, DismissalRecord, "x1") is None
+    assert await repo.load(store, ReviewThread, "t1") is None
+    assert await repo.load(store, Comment, "c1") is None
+    assert await repo.load(store, Comment, "c2") is None
+    assert await blobs.exists("p/i1/original.png") is False
+    assert await blobs.exists("p/i2/original.png") is False
+    assert client.get(f"/api/projects/{project}/images").json() == []
+
+
+@pytest.mark.anyio
+async def test_only_the_owner_may_delete_an_image(client, project, store, blobs):
+    await seed_image_lineage(store, blobs, project)
+    await link_real_members(store, project)
+
+    as_user(client, DESIGNER)
+    assert client.delete(f"/api/projects/{project}/images/i1").status_code == 403
+    as_user(client, SALES)
+    assert client.delete(f"/api/projects/{project}/images/i1").status_code == 403
+
+    assert await repo.load(store, ImageAsset, "i1") is not None
+
+
+def test_deleting_an_unknown_image_is_a_404(client, project):
+    as_user(client, OWNER)
+    assert client.delete(f"/api/projects/{project}/images/nope").status_code == 404

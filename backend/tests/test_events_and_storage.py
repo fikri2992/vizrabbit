@@ -59,6 +59,16 @@ async def test_write_returns_the_path_for_storing_on_the_entity(blobs):
     assert await blobs.write("a/b.png", b"x") == "a/b.png"
 
 
+async def test_delete_removes_the_blob(blobs):
+    await blobs.write("p/i/original.png", b"data")
+    await blobs.delete("p/i/original.png")
+    assert await blobs.exists("p/i/original.png") is False
+
+
+async def test_deleting_a_missing_blob_is_harmless(blobs):
+    await blobs.delete("p/i/never-written.png")
+
+
 def test_public_urls_route_through_the_api(blobs):
     assert blobs.public_url("projects/p/images/i/original.png").startswith("/api/blobs/")
 

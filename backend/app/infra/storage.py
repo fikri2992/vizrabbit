@@ -27,6 +27,8 @@ class BlobStore(Protocol):
 
     async def exists(self, path: str) -> bool: ...
 
+    async def delete(self, path: str) -> None: ...
+
     def public_url(self, path: str) -> str: ...
 
 
@@ -50,6 +52,9 @@ class LocalBlobStore:
 
     async def exists(self, path: str) -> bool:
         return self._full(path).exists()
+
+    async def delete(self, path: str) -> None:
+        self._full(path).unlink(missing_ok=True)
 
     def public_url(self, path: str) -> str:
         """Served back through the API rather than the filesystem, so the same URL
@@ -82,6 +87,15 @@ class GcsBlobStore:
         import asyncio
 
         return await asyncio.to_thread(self._bucket.blob(path).exists)
+
+    async def delete(self, path: str) -> None:
+        import asyncio
+        import contextlib
+
+        from google.cloud.exceptions import NotFound
+
+        with contextlib.suppress(NotFound):
+            await asyncio.to_thread(self._bucket.blob(path).delete)
 
     def public_url(self, path: str) -> str:
         return f"/api/blobs/{path}"
