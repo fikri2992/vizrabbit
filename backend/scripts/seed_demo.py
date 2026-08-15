@@ -27,6 +27,7 @@ from app.domain.entities import (
     ImageStatus,
     Member,
     Project,
+    Region,
     Role,
     Run,
     RunStatus,
@@ -203,6 +204,7 @@ async def seed() -> None:
     await repo.save(store, asset)
 
     for pin, (spec, annotation) in enumerate(zip(DEMO_DEFECTS, annotations, strict=True), start=1):
+        span = grid.span_bounds(spec["cells"])
         await repo.save(
             store,
             DefectRecord(
@@ -216,6 +218,9 @@ async def seed() -> None:
                 comment=spec["comment"],
                 rule_ref=spec["rule_ref"],
                 circle=Circle(cx=annotation.cx, cy=annotation.cy, radius=annotation.radius),
+                region=Region(
+                    left=span.left, top=span.top, width=span.width, height=span.height
+                ),
                 circle_iterations=spec["iterations"],
                 circle_verified=spec["verified"],
                 status=spec["status"],

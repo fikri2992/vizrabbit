@@ -155,6 +155,15 @@ class Circle(BaseModel):
     radius: int
 
 
+class Region(BaseModel):
+    """A defect's tight extent in natural pixels — what the review UI outlines."""
+
+    left: int
+    top: int
+    width: int
+    height: int
+
+
 class DefectRecord(BaseModel):
     id: str
     project_id: str
@@ -166,6 +175,8 @@ class DefectRecord(BaseModel):
     comment: str
     rule_ref: str = ""
     circle: Circle
+    #: None only on records that predate region tracking; the UI falls back to the circle.
+    region: Region | None = None
     circle_iterations: int = 1
     circle_verified: bool = True
     status: DefectState = DefectState.OPEN

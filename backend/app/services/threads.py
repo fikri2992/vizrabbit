@@ -17,6 +17,7 @@ from app.domain.entities import (
     DefectRecord,
     ImageAsset,
     Project,
+    Region,
     ReviewThread,
     ThreadAgentState,
     User,
@@ -187,6 +188,7 @@ async def ask_agent(
         severity = verdict.severity or Severity.WARNING
         defect_cells = verdict.cells or cells
         cx, cy, radius = grid.circle_for(defect_cells)
+        span = grid.span_bounds(defect_cells)
         defect = DefectRecord(
             id=new_id(),
             project_id=project.id,
@@ -197,6 +199,9 @@ async def ask_agent(
             severity=severity,
             comment=verdict.comment or verdict.reason,
             circle=Circle(cx=cx, cy=cy, radius=radius),
+            region=Region(
+                left=span.left, top=span.top, width=span.width, height=span.height
+            ),
         )
         await repo.save(store, defect)
         thread.defect_id = defect.id

@@ -20,6 +20,7 @@ from app.domain.entities import (
     ImageStatus,
     NotificationKind,
     Project,
+    Region,
     Run,
     RunStatus,
     User,
@@ -214,7 +215,9 @@ async def _persist_report(
 ) -> None:
     from app.imaging.annotate import draw_annotations
 
+    grid = Grid.for_image(image.width, image.height)
     for defect in report.defects:
+        span = grid.span_bounds(defect.cells)
         await repo.save(
             store,
             DefectRecord(
@@ -231,6 +234,9 @@ async def _persist_report(
                     cx=defect.annotation.cx,
                     cy=defect.annotation.cy,
                     radius=defect.annotation.radius,
+                ),
+                region=Region(
+                    left=span.left, top=span.top, width=span.width, height=span.height
                 ),
                 circle_iterations=defect.circle_iterations,
                 circle_verified=defect.circle_verified,

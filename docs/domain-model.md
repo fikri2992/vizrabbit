@@ -16,7 +16,8 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 | **Grid** | 8×8 chess-labeled overlay (A1–H8), aspect-adapted so cells stay near-square. Labels drawn with high-contrast outline. |
 | **Suspect cell** | Grid cell flagged by the Scanner as possibly containing a defect. High recall by design. |
 | **Contact sheet** | Composite image: full original + zoomed crop (suspect cell + 1-cell margin, 2× upscale) fed to the Inspector. |
-| **Defect** | Confirmed issue. Has category, severity, cell refs, circle annotation, comment thread, status. |
+| **Defect** | Confirmed issue. Has category, severity, cell refs, circle annotation, region (tight pixel extent from the cell span — what the review UI outlines as a rounded box), comment thread, status. |
+| **Marker visibility** | Idle canvas shows numbered pins only; a marker's geometry draws when its pin, rail card, or selection makes it active. Frame.io model: the image stays clean. |
 | **Dismissal** | Inspector/verifier rejecting a suspect as false positive. Logged, never deleted. |
 | **Annotation loop** | Annotator draws circle → looks at its own output → verifies circle lands on defect → adjusts. Max 3 iterations; on max-out, best attempt kept and tagged `needs human review`. |
 | **Pro gate** | Final verification pass by the expensive Pro model. Hard cap: 3 Pro calls per run. |

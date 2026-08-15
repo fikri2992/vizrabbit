@@ -20,10 +20,11 @@ def client():
 
 @pytest.fixture
 def local_dev(monkeypatch):
-    """A machine with the flag on and no cloud configuration."""
+    """A machine with the flag on and no cloud or OAuth configuration."""
     monkeypatch.setattr(settings, "allow_dev_login", True)
     monkeypatch.setattr(settings, "gcp_project", "")
     monkeypatch.setattr(settings, "gcs_bucket", "")
+    monkeypatch.setattr(settings, "google_client_id", "")
 
 
 def test_dev_login_is_off_by_default():

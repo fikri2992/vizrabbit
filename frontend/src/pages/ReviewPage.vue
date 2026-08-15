@@ -35,6 +35,7 @@ export default {
   data() {
     return {
       selectedId: '',
+      hoveredId: '',
       tab: 'comments',
       tool: 'select',
       color: COLORS[0],
@@ -338,9 +339,9 @@ export default {
     </header>
 
     <div class="grid min-h-0 flex-1 lg:grid-cols-[1fr_23rem]">
-      <!-- Canvas column -->
-      <div class="flex min-h-0 flex-col gap-2 overflow-y-auto p-4">
-        <div class="relative">
+      <!-- Canvas column: the image contain-fits — the rail is the only thing that scrolls -->
+      <div class="flex min-h-0 flex-col gap-2 p-3">
+        <div class="relative min-h-0 flex-1 overflow-hidden rounded-lg">
           <ReviewCanvas
             ref="canvas"
             :src="activeImage.original_url"
@@ -352,6 +353,7 @@ export default {
             :tool="tool"
             :color="color"
             :selected-id="selectedId"
+            :hovered-id="hoveredId"
             @select="onCanvasSelect"
             @shape="onShape"
           />
@@ -410,7 +412,12 @@ export default {
               <button type="button" class="hover:text-white" aria-label="Clear drawings" @click="pendingShapes = []">×</button>
             </span>
             <span v-else class="text-xs text-neutral-500">
-              Pick a tool and draw on the image to anchor your comment
+              Draw on the image to anchor your comment —
+              <kbd class="rounded border border-neutral-700 px-1">c</kbd> circle
+              <kbd class="rounded border border-neutral-700 px-1">r</kbd> rect
+              <kbd class="rounded border border-neutral-700 px-1">a</kbd> arrow
+              <kbd class="rounded border border-neutral-700 px-1">p</kbd> pen
+              · scroll zooms · <kbd class="rounded border border-neutral-700 px-1">j/k</kbd> next/prev
             </span>
           </div>
 
@@ -457,16 +464,7 @@ export default {
           </p>
         </div>
 
-        <p v-if="notice" class="rounded bg-neutral-800/70 p-2 text-sm text-neutral-200">{{ notice }}</p>
-
-        <p class="text-xs text-neutral-600">
-          <kbd class="rounded border border-neutral-700 px-1">c</kbd> circle
-          <kbd class="ml-1 rounded border border-neutral-700 px-1">r</kbd> rect
-          <kbd class="ml-1 rounded border border-neutral-700 px-1">a</kbd> arrow
-          <kbd class="ml-1 rounded border border-neutral-700 px-1">p</kbd> pen
-          <kbd class="ml-1 rounded border border-neutral-700 px-1">j/k</kbd> next/prev
-          · scroll to zoom · drag to pan
-        </p>
+        <p v-if="notice" class="shrink-0 rounded bg-neutral-800/70 px-2 py-1.5 text-sm text-neutral-200">{{ notice }}</p>
       </div>
 
       <!-- Rail -->
@@ -511,6 +509,8 @@ export default {
                     : 'border-neutral-800 hover:border-neutral-700'
                 "
                 @click="select(item)"
+                @mouseenter="hoveredId = item.id"
+                @mouseleave="hoveredId = ''"
               >
                 <!-- Agent defect -->
                 <template v-if="item.kind === 'defect'">
@@ -526,7 +526,19 @@ export default {
                     <SeverityChip :status="item.defect.status" />
                     <span class="ml-auto font-mono text-xs text-neutral-500">{{ item.pin }}</span>
                   </div>
-                  <p class="px-3 pb-2.5 pt-1.5 text-sm text-neutral-200">{{ item.defect.comment }}</p>
+                  <p
+                    class="px-3 pt-1.5 text-sm text-neutral-200"
+                    :class="selectedId === item.id ? 'pb-1' : 'line-clamp-2 pb-2.5'"
+                  >
+                    {{ item.defect.comment }}
+                  </p>
+                  <p
+                    v-if="selectedId === item.id"
+                    class="px-3 pb-2 text-[11px] text-neutral-500"
+                  >
+                    {{ item.defect.category }} · cells {{ item.defect.cells.join(', ') }}
+                    <template v-if="item.defect.rule_ref"> · {{ item.defect.rule_ref }}</template>
+                  </p>
 
                   <div
                     v-if="selectedId === item.id && thread && thread.defect.id === item.id"
@@ -569,15 +581,30 @@ export default {
                   </div>
 
                   <div class="space-y-2 px-3 py-2">
-                    <div v-for="entry in item.comments" :key="entry.id" class="text-sm">
+                    <div
+                      v-for="entry in selectedId === item.id ? item.comments : item.comments.slice(0, 1)"
+                      :key="entry.id"
+                      class="text-sm"
+                    >
                       <div class="flex items-baseline gap-2">
                         <span class="text-xs font-medium" :class="entry.is_agent ? 'text-violet-300' : ''">
                           {{ entry.author_name }}
                         </span>
                         <span class="text-[11px] text-neutral-600">{{ when(entry.created_at) }}</span>
                       </div>
-                      <p class="mt-0.5 whitespace-pre-wrap text-neutral-300">{{ entry.body }}</p>
+                      <p
+                        class="mt-0.5 whitespace-pre-wrap text-neutral-300"
+                        :class="selectedId === item.id ? '' : 'line-clamp-2'"
+                      >
+                        {{ entry.body }}
+                      </p>
                     </div>
+                    <p
+                      v-if="selectedId !== item.id && item.comments.length > 1"
+                      class="text-[11px] text-neutral-500"
+                    >
+                      {{ item.comments.length - 1 }} more repl{{ item.comments.length - 1 > 1 ? 'ies' : 'y' }}
+                    </p>
                   </div>
 
                   <div v-if="selectedId === item.id" class="border-t border-neutral-800 p-2.5" @click.stop>
