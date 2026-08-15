@@ -126,10 +126,17 @@ export default {
     // quietly; the pins have already appeared via the store refetch.
     agentWorking(now, before) {
       if (before && !now) {
-        const failed = this.activeImage?.image.status === 'failed'
-        this.finishedNotice = failed
-          ? 'The agent could not finish this image — see Activity.'
-          : `Agent finished — ${this.defects.length} finding${this.defects.length === 1 ? '' : 's'}, ${this.dismissals.length} rejected`
+        if (this.activeImage?.image.status === 'failed') {
+          this.finishedNotice = 'The agent could not finish this image — see Activity.'
+          return
+        }
+        // The finished event carries the authoritative counts; local defect and
+        // dismissal lists may still be refetching when this fires.
+        const done = this.imageActivity.find((event) => event.stage === 'image_finished')
+        const found = done?.detail?.defects ?? this.defects.length
+        const rejected = done?.detail?.dismissed ?? this.dismissals.length
+        this.finishedNotice =
+          `Agent finished — ${found} finding${found === 1 ? '' : 's'}, ${rejected} rejected`
       }
     },
   },
