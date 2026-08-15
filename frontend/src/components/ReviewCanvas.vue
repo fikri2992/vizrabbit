@@ -298,9 +298,12 @@ export default {
       }
       const { start, end } = draft
       if (draft.kind === 'circle') {
-        const r = Math.hypot(end.x - start.x, end.y - start.y)
+        // The drag is a bounding area, like every design tool — not centre-out.
+        const r = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y)) / 2
         if (r < 4) return null
-        return { kind: 'circle', points: [round(start.x), round(start.y), round(r)], color: draft.color }
+        const cx = (start.x + end.x) / 2
+        const cy = (start.y + end.y) / 2
+        return { kind: 'circle', points: [round(cx), round(cy), round(r)], color: draft.color }
       }
       if (draft.kind === 'rect') {
         const x = Math.min(start.x, end.x)
@@ -323,7 +326,15 @@ export default {
       if (this.draft.kind === 'path') return this.draft
       const { start, end, kind, color } = this.draft
       if (kind === 'circle') {
-        return { kind, points: [start.x, start.y, Math.hypot(end.x - start.x, end.y - start.y)], color }
+        return {
+          kind,
+          points: [
+            (start.x + end.x) / 2,
+            (start.y + end.y) / 2,
+            Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y)) / 2,
+          ],
+          color,
+        }
       }
       if (kind === 'rect') {
         return {

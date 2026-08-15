@@ -6,6 +6,7 @@ import DefectThread from '@/components/DefectThread.vue'
 import ReviewCanvas from '@/components/ReviewCanvas.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
 import { isClear, sortDefects } from '@/domain/defects'
+import { ago } from '@/domain/time'
 import { useProjectsStore } from '@/stores/projects'
 import { useReviewStore } from '@/stores/review'
 
@@ -18,6 +19,8 @@ const TOOLS = [
 ]
 
 const COLORS = ['#E24B4A', '#EF9F27', '#378ADD', '#22C55E', '#E879F9']
+
+const SEVERITY_HEX = { blocker: '#E24B4A', warning: '#EF9F27', nitpick: '#378ADD' }
 
 const AGENT_STATE_LABEL = {
   inspecting: 'agent inspecting…',
@@ -259,8 +262,12 @@ export default {
         this.notice = error.message
       }
     },
-    when(value) {
-      return new Date(value).toLocaleString()
+    ago,
+
+    /** The rail echoes the canvas: pins share one colour language. */
+    pinColor(item) {
+      if (item.kind === 'defect') return SEVERITY_HEX[item.defect.severity] || '#888'
+      return item.thread.shapes[0]?.color || '#378ADD'
     },
   },
 }
@@ -498,51 +505,66 @@ export default {
         <div class="min-h-0 flex-1 overflow-y-auto">
           <!-- Comments tab: one rail, agent and humans together -->
           <template v-if="tab === 'comments'">
-            <div v-if="railItems.length" class="space-y-2 p-3">
+            <div v-if="railItems.length" class="divide-y divide-neutral-800/70">
               <article
                 v-for="item in railItems"
                 :key="item.id"
-                class="cursor-pointer rounded-lg border transition"
-                :class="
-                  selectedId === item.id
-                    ? 'border-neutral-500 bg-neutral-900'
-                    : 'border-neutral-800 hover:border-neutral-700'
-                "
+                class="cursor-pointer border-l-2 px-3 py-2.5 transition"
+                :class="selectedId === item.id ? 'bg-neutral-900/70' : 'border-l-transparent hover:bg-neutral-900/40'"
+                :style="selectedId === item.id ? { borderLeftColor: pinColor(item) } : {}"
                 @click="select(item)"
                 @mouseenter="hoveredId = item.id"
                 @mouseleave="hoveredId = ''"
               >
+                <!-- Shared header: pin, author, state, age -->
+                <div class="flex items-center gap-2">
+                  <span
+                    class="flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-black"
+                    :style="{ background: pinColor(item), opacity: item.open ? 1 : 0.5 }"
+                  >
+                    {{ item.pin }}
+                  </span>
+                  <span
+                    class="truncate text-xs font-medium"
+                    :class="item.kind === 'defect' ? 'text-violet-300' : ''"
+                  >
+                    {{ item.kind === 'defect' ? 'QA agent' : item.thread.author_name }}
+                  </span>
+                  <template v-if="item.kind === 'defect'">
+                    <SeverityChip :severity="item.defect.severity" />
+                    <SeverityChip v-if="item.defect.status !== 'open'" :status="item.defect.status" />
+                  </template>
+                  <template v-else>
+                    <span
+                      v-if="item.thread.resolved"
+                      class="rounded-full bg-green-500/15 px-1.5 py-px text-[10px] text-green-300 ring-1 ring-inset ring-green-500/40"
+                    >
+                      Resolved
+                    </span>
+                    <span v-if="agentStateLabel(item.thread)" class="text-[10px] text-violet-300">
+                      {{ agentStateLabel(item.thread) }}
+                    </span>
+                  </template>
+                  <span class="ml-auto shrink-0 text-[10px] text-neutral-600">
+                    {{ ago(item.kind === 'defect' ? item.defect.created_at : item.thread.created_at) }}
+                  </span>
+                </div>
+
                 <!-- Agent defect -->
                 <template v-if="item.kind === 'defect'">
-                  <div class="flex items-center gap-2 px-3 pt-2.5">
-                    <span class="flex size-5 items-center justify-center rounded-full bg-violet-500/20 text-violet-300">
-                      <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="5" y="8" width="14" height="10" rx="2" />
-                        <path d="M12 4v4M9 13h.01M15 13h.01" stroke-linecap="round" />
-                      </svg>
-                    </span>
-                    <span class="text-xs font-medium">QA agent</span>
-                    <SeverityChip :severity="item.defect.severity" />
-                    <SeverityChip :status="item.defect.status" />
-                    <span class="ml-auto font-mono text-xs text-neutral-500">{{ item.pin }}</span>
-                  </div>
                   <p
-                    class="px-3 pt-1.5 text-sm text-neutral-200"
-                    :class="selectedId === item.id ? 'pb-1' : 'line-clamp-2 pb-2.5'"
+                    class="mt-1 text-sm text-neutral-200"
+                    :class="selectedId === item.id ? '' : 'line-clamp-2'"
                   >
                     {{ item.defect.comment }}
                   </p>
-                  <p
-                    v-if="selectedId === item.id"
-                    class="px-3 pb-2 text-[11px] text-neutral-500"
-                  >
+                  <p v-if="selectedId === item.id" class="mt-1 text-[11px] text-neutral-500">
                     {{ item.defect.category }} · cells {{ item.defect.cells.join(', ') }}
                     <template v-if="item.defect.rule_ref"> · {{ item.defect.rule_ref }}</template>
                   </p>
 
                   <div
                     v-if="selectedId === item.id && thread && thread.defect.id === item.id"
-                    class="border-t border-neutral-800"
                     @click.stop
                   >
                     <DefectThread
@@ -557,80 +579,60 @@ export default {
 
                 <!-- Human thread -->
                 <template v-else>
-                  <div class="flex items-center gap-2 px-3 pt-2.5">
-                    <span
-                      class="flex size-5 items-center justify-center rounded-full text-[10px] font-semibold text-black"
-                      :style="{ background: item.thread.shapes[0]?.color || '#378ADD' }"
-                    >
-                      {{ (item.thread.author_name || '?').slice(0, 1).toUpperCase() }}
-                    </span>
-                    <span class="text-xs font-medium">{{ item.thread.author_name }}</span>
-                    <span
-                      v-if="item.thread.resolved"
-                      class="rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-300 ring-1 ring-inset ring-green-500/40"
-                    >
-                      Resolved
-                    </span>
-                    <span
-                      v-if="agentStateLabel(item.thread)"
-                      class="text-xs text-violet-300"
-                    >
-                      {{ agentStateLabel(item.thread) }}
-                    </span>
-                    <span class="ml-auto font-mono text-xs text-neutral-500">{{ item.pin }}</span>
-                  </div>
+                  <p
+                    class="mt-1 whitespace-pre-wrap text-sm text-neutral-200"
+                    :class="selectedId === item.id ? '' : 'line-clamp-2'"
+                  >
+                    {{ item.comments[0]?.body }}
+                  </p>
+                  <p
+                    v-if="selectedId !== item.id && item.comments.length > 1"
+                    class="mt-1 text-[11px] text-neutral-500"
+                  >
+                    {{ item.comments.length - 1 }} repl{{ item.comments.length - 1 > 1 ? 'ies' : 'y' }}
+                  </p>
 
-                  <div class="space-y-2 px-3 py-2">
+                  <template v-if="selectedId === item.id">
                     <div
-                      v-for="entry in selectedId === item.id ? item.comments : item.comments.slice(0, 1)"
-                      :key="entry.id"
-                      class="text-sm"
+                      v-if="item.comments.length > 1"
+                      class="mt-2 space-y-2 border-l border-neutral-800 pl-2.5"
                     >
-                      <div class="flex items-baseline gap-2">
-                        <span class="text-xs font-medium" :class="entry.is_agent ? 'text-violet-300' : ''">
-                          {{ entry.author_name }}
-                        </span>
-                        <span class="text-[11px] text-neutral-600">{{ when(entry.created_at) }}</span>
+                      <div v-for="entry in item.comments.slice(1)" :key="entry.id" class="text-sm">
+                        <div class="flex items-baseline gap-2">
+                          <span class="text-xs font-medium" :class="entry.is_agent ? 'text-violet-300' : ''">
+                            {{ entry.author_name }}
+                          </span>
+                          <span class="text-[10px] text-neutral-600">{{ ago(entry.created_at) }}</span>
+                        </div>
+                        <p class="mt-0.5 whitespace-pre-wrap text-neutral-300">{{ entry.body }}</p>
                       </div>
-                      <p
-                        class="mt-0.5 whitespace-pre-wrap text-neutral-300"
-                        :class="selectedId === item.id ? '' : 'line-clamp-2'"
-                      >
-                        {{ entry.body }}
-                      </p>
                     </div>
-                    <p
-                      v-if="selectedId !== item.id && item.comments.length > 1"
-                      class="text-[11px] text-neutral-500"
-                    >
-                      {{ item.comments.length - 1 }} more repl{{ item.comments.length - 1 > 1 ? 'ies' : 'y' }}
-                    </p>
-                  </div>
 
-                  <div v-if="selectedId === item.id" class="border-t border-neutral-800 p-2.5" @click.stop>
-                    <div class="flex gap-2">
-                      <input
-                        v-model="replyDrafts[item.id]"
-                        placeholder="Reply…"
-                        class="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-sm outline-none focus:border-neutral-500"
-                        @keydown.enter.prevent="sendReply(item)"
-                      />
+                    <div class="mt-2" @click.stop>
+                      <div class="flex gap-2">
+                        <input
+                          v-model="replyDrafts[item.id]"
+                          placeholder="Reply…"
+                          class="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-sm outline-none focus:border-neutral-500"
+                          @keydown.enter.prevent="sendReply(item)"
+                        />
+                        <button
+                          type="button"
+                          class="rounded border border-neutral-700 px-2.5 text-xs hover:bg-neutral-800"
+                          @click="sendReply(item)"
+                        >
+                          Reply
+                        </button>
+                      </div>
                       <button
                         type="button"
-                        class="rounded border border-neutral-700 px-2.5 text-xs hover:bg-neutral-800"
-                        @click="sendReply(item)"
+                        class="mt-1.5 text-[11px] text-neutral-500 hover:text-neutral-200"
+                        @click="resolveThread(projectId, item.id, !item.thread.resolved)"
                       >
-                        Reply
+                        {{ item.thread.resolved ? 'Reopen thread' : 'Mark resolved' }}
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      class="mt-2 text-xs text-neutral-500 hover:text-neutral-200"
-                      @click="resolveThread(projectId, item.id, !item.thread.resolved)"
-                    >
-                      {{ item.thread.resolved ? 'Reopen thread' : 'Mark resolved' }}
-                    </button>
-                  </div>
+                  </template>
                 </template>
               </article>
             </div>
