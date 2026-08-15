@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 
 import api from '@/api'
 import { sortDefects, summarize } from '@/domain/defects'
@@ -229,3 +229,8 @@ export const useReviewStore = defineStore('review', {
     },
   },
 })
+
+// Hot-swap actions during dev instead of stranding components on a stale store.
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useReviewStore, import.meta.hot))
+}
