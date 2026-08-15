@@ -120,6 +120,124 @@ Tasks:
 - Devpost submitted **≥ 24h before deadline** (by Aug 30 17:00 PDT)
 - Repo public/shared, README verified by fresh clone
 
-## Cut order (unchanged)
+---
 
-1. Memory collision-grilling → 2. Mentions/notifications → 3. Grilling UI (fall back to pre-grilled seed). Never cut: pipeline, benchmark, review screen, re-check lifecycle, deploy, video.
+# Extension phases (2026-08-16) — from docs/roadmap-decisions.md
+
+Deploy landed early (Phase 4 hosted URL live since Aug 15), which frees the
+calendar for the product-fight outcomes. Decisions and their rationale live in
+`roadmap-decisions.md`; this section is the build order and the gates.
+
+## Phase 6 — Slot/variant remodel (Aug 16–19) — foundation, lands first
+
+The unit of work becomes the **slot** (creative intent) → variants → linear
+version chain per variant. Grouping is explicit at upload; version chains stay
+linear (a competing fix is a new variant, never a fork); approval is
+per-variant, the slot completes on first approval, siblings archive.
+
+Tasks:
+- `domain/entities.py`: `Slot` entity; `ImageAsset` gains `slot_id` and
+  `variant` ordinal; archived state for losing variants
+- Upload flow asks: new slots (one per file) or variants of one slot
+- Migration shim: legacy flat images each auto-wrap in their own slot on read —
+  zero data loss, no manual migration step
+- Approval semantics: approve variant → slot complete → siblings archived
+  (reversible by approving another variant); needs-review counts exclude
+  archived variants
+- Delete: variant delete removes its version chain; slot delete removes
+  everything (consequence modal counts extend accordingly)
+- History UI: 2-level tree on the slot card — variants as columns, versions as
+  a vertical chain, verdict dot per node, click-through to review
+- Review screen header shows slot context (variant 2 of 3, v2)
+
+**Gate 6 (quantified):**
+- Every pre-existing backend test still green (no behavioural regressions)
+- New invariant tests: linear-chain enforcement (a second fix of the same
+  version is rejected or lands as a new variant), slot completion on approval,
+  archived variants excluded from attention counts — full matrix, no mocks
+- Browser flow: upload 3 files as one slot's variants → tree renders 3
+  columns; submit a fix on one → its column grows one node; approve it →
+  slot shows complete, siblings show archived
+- A legacy project (pre-slot data) loads with every image visible and
+  reviewable, zero manual steps
+
+## Phase 7 — Brand guardian: palette (Aug 20–22)
+
+Hybrid checker: mechanical measurement, agent judgment, normal defect
+lifecycle with `BRAND-*` rule ids.
+
+Tasks:
+- `BrandProfile`: confirmed palette hexes + per-role tolerance (ΔE, Lab);
+  stored only via owner confirmation — unconfirmed extractions never fire
+- Griller extension: guideline upload accepts PDF; extraction proposes a
+  profile (hexes read visually from swatch graphics, bounded page budget);
+  scope ambiguities become grilling questions; confirmation form pre-filled
+  and editable, works standalone without any document
+- `imaging/palette.py`: dominant-palette extraction + ΔE (CIE Lab) against the
+  confirmed profile — pure Python, no model calls
+- Pipeline integration: measurements attach to the Scanner/Inspector exchange;
+  the Inspector decides whether the off-palette region is a designed element
+  (violation) or scene content (not one)
+- Demo prerequisite: real guideline uploaded to the live project so grilling
+  and brand defects are visible
+
+**Gate 7 (quantified):**
+- ΔE math unit-tested against published Lab reference pairs (±0.1)
+- Synthetic palette eval: ≥ 0.8 recall on 10 planted off-palette designed
+  elements; ≤ 1 false positive across 10 on-palette images containing
+  ordinary photographic colour
+- Extraction check script (`scripts/check_brand_extraction.py`) against a real
+  brand PDF: proposes ≥ 3 hexes including at least one that appears only
+  inside a swatch graphic, never as text
+- End-to-end: a violating image produces a `BRAND-*` defect whose comment
+  carries the measured ΔE; an unconfirmed profile produces zero brand defects
+  (asserted by test)
+
+## Phase 8 — Approved export (Aug 22) — closes the dead end
+
+Tasks:
+- `GET /projects/{id}/export/approved` → zip of clean originals (never
+  annotated renders), latest approved version of each slot's winning variant
+- "Download approved (N)" button on the project page, count live
+
+**Gate 8 (quantified):**
+- Integration test: zip contains exactly the winners' latest approved
+  originals — no annotated files, no superseded versions, unique filenames
+- Browser-verified: approve → count increments → downloaded zip opens
+
+## Phase 9 — Platform context checker (Aug 23–25) — riskiest, cuttable
+
+Placement findings are advisory, belong to an (image, platform) pair, and
+never enter the defect lifecycle. Mechanical checks only in v1.
+
+Tasks:
+- Project setting: target platforms (aspect + safe-zone presets)
+- `PlacementFinding`: advisory severity, closed by human decision
+  (acknowledge/waive), no re-check path
+- Checks: strapline/text legibility at platform thumbnail size; declared
+  critical element (logo/product/strapline region from the brand profile or a
+  drawn region) fully inside the platform crop and safe-zone
+- Review screen: per-platform row under the status header; cost cap ≤ 2 extra
+  model calls per image per platform
+
+**Gate 9 (quantified):**
+- Legibility eval on synthesized text at graduated sizes: ≥ 0.9 correct
+  classification beyond 2× the threshold distance
+- Lifecycle isolation asserted: no path from `PlacementFinding` into defect
+  states (test), and placement findings never block image approval
+- Demo shows at least one platform end-to-end; degrading to one platform is
+  the planned cut, not a failure
+
+## Revised calendar
+
+- Aug 16–19 Phase 6 · Aug 20–22 Phase 7 · Aug 22 Phase 8 · Aug 23–25 Phase 9
+- Aug 26–28 hardening + outstanding Gate 1/3/4 evidence (exhaustive labels,
+  benchmark re-run, 5 real fix pairs, cost/image, fresh-clone README timing)
+- Aug 29–31 Phase 5 submission (video, Devpost, ≥ 24h early) — protected
+
+## Cut order (revised)
+
+1. Platform checker (Phase 9) → 2. History-tree polish (fall back to grouped
+cards per slot) → 3. Memory collision-grilling → 4. Mentions/notifications.
+Never cut: pipeline, benchmark, review screen, re-check lifecycle, slot
+remodel once started, brand palette once started, deploy, video.
