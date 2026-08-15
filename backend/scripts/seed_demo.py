@@ -21,6 +21,7 @@ from app.domain.entities import (
     Circle,
     Comment,
     DefectRecord,
+    DismissalRecord,
     Guideline,
     ImageAsset,
     ImageStatus,
@@ -104,6 +105,26 @@ DEMO_DEFECTS = [
         "verified": True,
         "iterations": 1,
     },
+]
+
+
+DEMO_DISMISSALS = [
+    (
+        ["A2", "B2"],
+        "Possible warping along the upper background gradient",
+        "The gradient is smooth and continuous; the banding is normal compression, not a defect.",
+    ),
+    (
+        ["G6", "H6"],
+        "Shadow under the product may be missing",
+        "A soft contact shadow is present and consistent with the key light from the upper left.",
+    ),
+    (
+        ["D2"],
+        "Edge of the packaging looked melted",
+        "At 2x the corner radius is clean and the seam runs unbroken; the softness is "
+        "depth of field.",
+    ),
 ]
 
 
@@ -198,6 +219,23 @@ async def seed() -> None:
                 circle_iterations=spec["iterations"],
                 circle_verified=spec["verified"],
                 status=spec["status"],
+            ),
+        )
+
+    # What the Scanner flagged and the Inspector threw out. Shown in the review
+    # screen, because "it considered this and rejected it" is the evidence that the
+    # agent is calibrated rather than merely confident.
+    for index, (cells, hypothesis, reason) in enumerate(DEMO_DISMISSALS, start=1):
+        await repo.save(
+            store,
+            DismissalRecord(
+                id=f"x-{index}",
+                project_id=PROJECT_ID,
+                image_id=asset.id,
+                cells=cells,
+                hypothesis=hypothesis,
+                reason=reason,
+                stage="inspector",
             ),
         )
 

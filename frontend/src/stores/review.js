@@ -9,6 +9,7 @@ export const useReviewStore = defineStore('review', {
   state: () => ({
     images: [], // [{ image, defects, original_url, annotated_url, gridded_url }]
     activeImage: null,
+    dismissals: [], // what the agent rejected — shown, never hidden
     thread: null, // { defect, comments, available_transitions }
     feed: [], // live agent activity
     streaming: false,
@@ -32,6 +33,12 @@ export const useReviewStore = defineStore('review', {
 
     async fetchImage(projectId, imageId) {
       this.activeImage = await api.get(`/api/projects/${projectId}/images/${imageId}`)
+    },
+
+    async fetchDismissals(projectId, imageId) {
+      this.dismissals = await api.get(
+        `/api/projects/${projectId}/images/${imageId}/dismissals`,
+      )
     },
 
     async upload(projectId, files) {

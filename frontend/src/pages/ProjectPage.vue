@@ -5,13 +5,14 @@ import ActivityFeed from '@/components/ActivityFeed.vue'
 import GuidelinePanel from '@/components/GuidelinePanel.vue'
 import MemoryPanel from '@/components/MemoryPanel.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
+import TeamPanel from '@/components/TeamPanel.vue'
 import { summarize } from '@/domain/defects'
 import { useProjectsStore } from '@/stores/projects'
 import { useReviewStore } from '@/stores/review'
 
 export default {
   name: 'ProjectPage',
-  components: { ActivityFeed, GuidelinePanel, MemoryPanel, SeverityChip },
+  components: { ActivityFeed, GuidelinePanel, MemoryPanel, SeverityChip, TeamPanel },
   props: { projectId: { type: String, required: true } },
   data() {
     return { dragging: false }
@@ -136,6 +137,7 @@ export default {
 
       <div class="space-y-6">
         <ActivityFeed :events="recentActivity" :streaming="streaming" />
+        <TeamPanel :project-id="projectId" />
         <MemoryPanel :project-id="projectId" :can-approve="canApproveMemory" />
         <GuidelinePanel :project-id="projectId" :can-edit="canEditGuideline" />
       </div>

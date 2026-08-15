@@ -8,7 +8,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import BlobsDep, BusDep, ProjectDep, StoreDep, UserDep, guard
-from app.domain.entities import DefectRecord, ImageAsset, Run
+from app.domain.entities import DefectRecord, DismissalRecord, ImageAsset, Run
 from app.domain.permissions import Permission
 from app.infra import repository as repo
 from app.services import recheck as recheck_service
@@ -102,6 +102,22 @@ async def _image_view(store, blobs, image: ImageAsset) -> ImageView:
         annotated_url=blobs.public_url(image.annotated_path) if image.annotated_path else None,
         gridded_url=blobs.public_url(image.gridded_path) if image.gridded_path else None,
     )
+
+
+@router.get("/projects/{project_id}/images/{image_id}/dismissals")
+async def list_dismissals(
+    image_id: str, project: ProjectDep, store: StoreDep
+) -> list[DismissalRecord]:
+    """What the agent considered and rejected.
+
+    Kept visible on purpose: a reviewer who can see the near-misses can judge
+    whether the agent is being appropriately sceptical or missing things, which a
+    list of confirmed defects alone never shows.
+    """
+    image = await repo.load(store, ImageAsset, image_id)
+    if image is None or image.project_id != project.id:
+        raise HTTPException(404, "image not found")
+    return await repo.dismissals_for_image(store, image_id)
 
 
 class FixSubmitted(BaseModel):

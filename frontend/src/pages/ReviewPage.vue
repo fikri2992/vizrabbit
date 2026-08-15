@@ -3,6 +3,7 @@ import { mapActions, mapState } from 'pinia'
 
 import AnnotatedImage from '@/components/AnnotatedImage.vue'
 import DefectThread from '@/components/DefectThread.vue'
+import DismissalLog from '@/components/DismissalLog.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
 import { CATEGORIES, SEVERITY_ORDER, filterDefects, isClear, sortDefects } from '@/domain/defects'
 import { useProjectsStore } from '@/stores/projects'
@@ -10,7 +11,7 @@ import { useReviewStore } from '@/stores/review'
 
 export default {
   name: 'ReviewPage',
-  components: { AnnotatedImage, DefectThread, SeverityChip },
+  components: { AnnotatedImage, DefectThread, DismissalLog, SeverityChip },
   props: {
     projectId: { type: String, required: true },
     imageId: { type: String, required: true },
@@ -28,7 +29,13 @@ export default {
     }
   },
   computed: {
-    ...mapState(useReviewStore, ['activeImage', 'thread', 'activeSummary', 'uploading']),
+    ...mapState(useReviewStore, [
+      'activeImage',
+      'thread',
+      'activeSummary',
+      'uploading',
+      'dismissals',
+    ]),
     canSubmitFix() {
       return useProjectsStore().can('submit_fix')
     },
@@ -59,6 +66,10 @@ export default {
   },
   async created() {
     await this.load()
+    window.addEventListener('keydown', this.onKey)
+  },
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.onKey)
   },
   watch: {
     // Version chips route to a sibling image; the component instance is reused.
@@ -76,6 +87,7 @@ export default {
       'approveImage',
       'submitFix',
       'fetchVersions',
+      'fetchDismissals',
     ]),
     async load() {
       this.notice = ''
@@ -83,8 +95,30 @@ export default {
       await useProjectsStore().fetchOne(this.projectId)
       await this.fetchImage(this.projectId, this.imageId)
       this.versions = await this.fetchVersions(this.projectId, this.imageId)
+      this.fetchDismissals(this.projectId, this.imageId)
       const first = this.defects[0]
       if (first) await this.select(first)
+    },
+
+    /** j/k and arrows step through defects without leaving the canvas. */
+    onKey(event) {
+      const tag = event.target.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+      const list = this.visibleDefects
+      if (!list.length) return
+
+      const step = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[event.key]
+      if (!step) return
+
+      event.preventDefault()
+      const current = list.findIndex((defect) => defect.id === this.selectedId)
+      const next = current === -1 ? 0 : (current + step + list.length) % list.length
+      this.select(list[next])
+      this.$refs.canvas?.centerOn?.(
+        { cx: list[next].circle.cx, cy: list[next].circle.cy },
+        1,
+      )
     },
     async onFixSelected(files) {
       const file = files?.[0]
@@ -197,6 +231,7 @@ export default {
       </div>
 
       <AnnotatedImage
+        ref="canvas"
         :src="activeImage.original_url"
         :width="activeImage.image.width"
         :height="activeImage.image.height"
@@ -282,6 +317,16 @@ export default {
 
       <p v-if="!visibleDefects.length" class="mt-4 text-sm text-neutral-500">
         No defects match these filters.
+      </p>
+
+      <div class="mt-4">
+        <DismissalLog :dismissals="dismissals" />
+      </div>
+
+      <p class="mt-3 text-xs text-neutral-600">
+        <kbd class="rounded border border-neutral-700 px-1">j</kbd> /
+        <kbd class="rounded border border-neutral-700 px-1">k</kbd> to step through defects ·
+        scroll to zoom · drag to pan
       </p>
     </div>
 
