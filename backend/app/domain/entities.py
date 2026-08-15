@@ -9,6 +9,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from app.domain.annotations import Shape
 from app.domain.lifecycle import Actor, DefectState
 from app.domain.taxonomy import Category, Severity
 
@@ -197,6 +198,37 @@ class Comment(BaseModel):
     is_agent: bool = False
     body: str
     mentions: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=now)
+
+
+class ThreadAgentState(StrEnum):
+    """Whether the agent was asked to look at a human annotation, and how that went."""
+
+    NONE = "none"
+    INSPECTING = "inspecting"
+    ANSWERED = "answered"
+    FAILED = "failed"
+
+
+class ReviewThread(BaseModel):
+    """A human-anchored annotation: drawn shapes plus a comment thread.
+
+    Shares one pin sequence with defects so the canvas numbering is a single
+    story. Comments attach via their ``defect_id`` field carrying this thread's
+    id — one thread mechanism, two kinds of author.
+    """
+
+    id: str
+    project_id: str
+    image_id: str
+    pin: int
+    author_id: str
+    author_name: str = ""
+    shapes: list[Shape] = Field(default_factory=list)
+    resolved: bool = False
+    agent_state: ThreadAgentState = ThreadAgentState.NONE
+    #: Set when an agent inspection confirmed a defect here.
+    defect_id: str | None = None
     created_at: datetime = Field(default_factory=now)
 
 

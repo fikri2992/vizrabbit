@@ -19,6 +19,7 @@ from app.domain.entities import (
     MemoryRule,
     Notification,
     Project,
+    ReviewThread,
     Run,
     User,
 )
@@ -37,7 +38,12 @@ COLLECTIONS: dict[type[BaseModel], str] = {
     DismissalRecord: "dismissals",
     Comment: "comments",
     Notification: "notifications",
+    ReviewThread: "threads",
 }
+
+
+async def threads_for_image(store: Store, image_id: str) -> list["ReviewThread"]:
+    return await find(store, ReviewThread, where={"image_id": image_id}, order_by="pin")
 
 
 class UnknownEntity(TypeError):

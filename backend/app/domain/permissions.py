@@ -19,6 +19,8 @@ class Permission(StrEnum):
     UPLOAD_IMAGES = "upload_images"
     SUBMIT_FIX = "submit_fix"
     PROPOSE_MEMORY_RULE = "propose_memory_rule"
+    #: Point the Inspector at a drawn region. Spends model budget, so not a viewer action.
+    ASK_AGENT = "ask_agent"
 
     # Owner-only, all of them accountability decisions.
     ANSWER_GRILLING = "answer_grilling"
@@ -40,6 +42,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.UPLOAD_IMAGES,
             Permission.SUBMIT_FIX,
             Permission.PROPOSE_MEMORY_RULE,
+            Permission.ASK_AGENT,
         }
     ),
     Role.OWNER: frozenset(Permission),  # every permission, by definition

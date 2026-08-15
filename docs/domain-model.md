@@ -22,6 +22,8 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 | **Pro gate** | Final verification pass by the expensive Pro model. Hard cap: 3 Pro calls per run. |
 | **Memory rule** | Standing rule promoted from a defect via "add to memory". Checked on all future scans in the project. Collisions with existing rules trigger grilling. |
 | **Re-check** | Uploading a fixed image version; agent verifies each open defect is resolved. Core: it is the only path to `verified_resolved`. |
+| **Review thread** | A human-anchored annotation: drawn shapes (circle/rect/arrow/freehand) + a comment, pinned to the image. Shares one pin sequence with defects. Frame.io model: every comment is anchored. |
+| **Ask agent** | A review thread flagged for inspection: the drawn region maps to grid cells, the Inspector runs on that crop with the human's question as hypothesis, and replies in the thread. A confirmed finding becomes a real defect carrying the thread's pin. |
 | **Brand Owner** | The one accountable member per project. Answers grilling, gates memory promotion, controls approval/overrides, owns false positives. |
 
 ## Agents (ADK)
