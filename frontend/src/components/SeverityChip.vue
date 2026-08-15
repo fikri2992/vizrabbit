@@ -1,18 +1,27 @@
 <script>
-const SEVERITY_CLASSES = {
-  blocker: 'bg-red-500/15 text-red-300 ring-red-500/40',
-  warning: 'bg-amber-500/15 text-amber-300 ring-amber-500/40',
-  nitpick: 'bg-blue-500/15 text-blue-300 ring-blue-500/40',
+/**
+ * Direction B: severity is the only colour on the page, and it lives in a dot.
+ * The chrome around it stays monochrome.
+ */
+const SEVERITY_DOTS = {
+  blocker: '#F09595',
+  warning: '#FAC775',
+  nitpick: '#85B7EB',
 }
 
 const STATUS_LABELS = {
   open: 'Open',
   needs_human_review: 'Needs review',
   fix_submitted: 'Fix submitted',
-  agent_rechecking: 'Agent re-checking',
-  verified_resolved: 'Verified resolved',
+  agent_rechecking: 'Re-checking',
+  verified_resolved: 'Resolved',
   dismissed: 'Dismissed',
   override_approved: 'Override approved',
+}
+
+const STATUS_DOTS = {
+  verified_resolved: '#9FE1CB',
+  needs_human_review: '#FAC775',
 }
 
 export default {
@@ -27,21 +36,21 @@ export default {
       if (this.status) return STATUS_LABELS[this.status] || this.status
       return this.severity || this.category
     },
-    classes() {
-      if (this.severity) return SEVERITY_CLASSES[this.severity] || ''
-      if (this.status === 'verified_resolved') return 'bg-green-500/15 text-green-300 ring-green-500/40'
-      if (this.status === 'agent_rechecking') return 'bg-violet-500/15 text-violet-300 ring-violet-500/40'
-      return 'bg-neutral-700/40 text-neutral-300 ring-neutral-600/50'
+    dot() {
+      if (this.severity) return SEVERITY_DOTS[this.severity] || '#77777d'
+      return STATUS_DOTS[this.status] || '#77777d'
+    },
+    tone() {
+      if (this.severity) return { color: SEVERITY_DOTS[this.severity] || '#a3a3a8' }
+      return { color: '#a3a3a8' }
     },
   },
 }
 </script>
 
 <template>
-  <span
-    class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
-    :class="classes"
-  >
+  <span class="inline-flex items-center gap-1.5 text-[11px] font-medium" :style="tone">
+    <span class="size-1.5 rounded-full" :style="{ background: dot }" />
     {{ label }}
   </span>
 </template>

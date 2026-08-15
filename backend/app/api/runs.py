@@ -84,6 +84,17 @@ async def list_images(
     return [await _image_view(store, blobs, image) for image in images]
 
 
+@router.get("/projects/{project_id}/images/{image_id}/delete_preview")
+async def delete_preview(
+    image_id: str, project: ProjectDep, store: StoreDep, user: UserDep
+) -> dict[str, int]:
+    guard(project, user, Permission.DELETE_IMAGE)
+    image = await repo.load(store, ImageAsset, image_id)
+    if image is None or image.project_id != project.id:
+        raise HTTPException(404, "image not found")
+    return await run_service.delete_preview(store, image)
+
+
 @router.delete("/projects/{project_id}/images/{image_id}", status_code=204)
 async def delete_image(
     image_id: str,

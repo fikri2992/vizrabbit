@@ -69,6 +69,11 @@ export const useReviewStore = defineStore('review', {
       if (this.activeImage) await this.fetchThreads(projectId, this.activeImage.image.id)
     },
 
+    /** What deleting this image would destroy — shown before the owner confirms. */
+    async deletePreview(projectId, imageId) {
+      return api.get(`/api/projects/${projectId}/images/${imageId}/delete_preview`)
+    },
+
     /** Owner removes an upload; the whole version lineage goes with it. */
     async deleteImage(projectId, imageId) {
       await api.del(`/api/projects/${projectId}/images/${imageId}`)

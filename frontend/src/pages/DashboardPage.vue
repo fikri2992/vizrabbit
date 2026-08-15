@@ -33,32 +33,32 @@ export default {
 
 <template>
   <div class="mx-auto max-w-4xl px-6 py-10">
-    <h2 class="text-xl font-semibold tracking-tight">Projects</h2>
+    <h2 class="text-xl font-medium tracking-tight">Projects</h2>
 
     <form class="mt-5 flex gap-2" @submit.prevent="submit">
       <input
         v-model="name"
         placeholder="New project name"
-        class="flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+        class="flex-1 rounded-md border border-edge-strong bg-panel px-3 py-2 text-sm outline-none focus:border-neutral-500"
       />
       <button
         type="submit"
         :disabled="!name.trim() || creating"
-        class="rounded bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-900 disabled:opacity-40"
+        class="rounded-md bg-neutral-50 px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-40"
       >
         Create
       </button>
     </form>
     <p class="mt-2 text-xs text-neutral-500">You become the brand owner of projects you create.</p>
 
-    <p v-if="error" class="mt-4 text-sm text-red-400">{{ error }}</p>
+    <p v-if="error" class="mt-4 text-sm text-blocker">{{ error }}</p>
     <p v-if="loading" class="mt-6 text-sm text-neutral-500">Loading…</p>
 
-    <ul v-else-if="items.length" class="mt-6 divide-y divide-neutral-800 rounded-lg border border-neutral-800">
+    <ul v-else-if="items.length" class="mt-6 divide-y divide-edge rounded-lg border border-edge bg-panel">
       <li v-for="entry in items" :key="entry.project.id">
         <RouterLink
           :to="{ name: 'project', params: { projectId: entry.project.id } }"
-          class="flex items-center justify-between px-4 py-3 hover:bg-neutral-900"
+          class="flex items-center justify-between px-4 py-3 hover:bg-panel-2"
         >
           <span class="font-medium">{{ entry.project.name }}</span>
           <span class="text-xs text-neutral-500">

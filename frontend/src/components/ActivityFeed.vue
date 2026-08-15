@@ -34,7 +34,7 @@ const STAGE_TONE = {
   run_finished: 'text-green-400',
   image_finished: 'text-green-400',
   recheck_finished: 'text-green-400',
-  pro_gate_started: 'text-violet-300',
+  pro_gate_started: 'text-neutral-200',
   pro_gate_skipped: 'text-amber-300',
 }
 

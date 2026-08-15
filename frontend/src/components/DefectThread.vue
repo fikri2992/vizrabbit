@@ -77,7 +77,7 @@ export default {
     <ul v-if="thread.comments.length" class="mb-2 space-y-2 border-l border-neutral-800 pl-2.5">
       <li v-for="comment in thread.comments" :key="comment.id" class="text-sm">
         <div class="flex items-baseline gap-2">
-          <span class="text-xs font-medium" :class="comment.is_agent ? 'text-violet-300' : ''">
+          <span class="text-xs font-medium" :class="comment.is_agent ? 'text-neutral-100' : ''">
             {{ comment.author_name }}
           </span>
           <span class="text-[10px] text-neutral-600">{{ ago(comment.created_at) }}</span>

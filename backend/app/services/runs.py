@@ -44,6 +44,29 @@ def new_id() -> str:
     return uuid4().hex
 
 
+async def delete_preview(store: Store, image: ImageAsset) -> dict[str, int]:
+    """What deleting this image would destroy — shown before the owner confirms."""
+    from app.services.recheck import version_history
+
+    lineage = await version_history(store, image)
+    defects = comments = dismissals = threads = 0
+    for asset in lineage:
+        for defect in await repo.defects_for_image(store, asset.id):
+            defects += 1
+            comments += len(await repo.comments_for_defect(store, defect.id))
+        for thread in await repo.threads_for_image(store, asset.id):
+            threads += 1
+            comments += len(await repo.comments_for_defect(store, thread.id))
+        dismissals += len(await repo.dismissals_for_image(store, asset.id))
+    return {
+        "versions": len(lineage),
+        "defects": defects,
+        "threads": threads,
+        "comments": comments,
+        "dismissals": dismissals,
+    }
+
+
 async def delete_image(
     store: Store, blobs: BlobStore, project: Project, user: User, image: ImageAsset
 ) -> list[str]:

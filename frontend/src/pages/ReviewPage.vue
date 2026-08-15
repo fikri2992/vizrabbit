@@ -289,14 +289,14 @@ export default {
 
       <h2 class="truncate text-sm font-semibold">{{ activeImage.image.filename }}</h2>
 
-      <span
-        class="rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
-        :class="{
-          'bg-green-500/15 text-green-300 ring-green-500/40': statusPill.tone === 'green',
-          'bg-amber-500/15 text-amber-300 ring-amber-500/40': statusPill.tone === 'amber',
-          'bg-violet-500/15 text-violet-300 ring-violet-500/40': statusPill.tone === 'violet',
-        }"
-      >
+      <span class="flex items-center gap-1.5 text-xs font-medium text-neutral-300">
+        <span
+          class="size-1.5 rounded-full"
+          :class="statusPill.tone === 'violet' ? 'animate-pulse' : ''"
+          :style="{
+            background: { green: '#9FE1CB', amber: '#FAC775', violet: '#a3a3a8' }[statusPill.tone],
+          }"
+        />
         {{ statusPill.label }}
       </span>
 
@@ -337,7 +337,7 @@ export default {
           v-if="can('approve_image')"
           type="button"
           :disabled="!everythingClosed || approved"
-          class="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          class="rounded-md bg-neutral-50 px-3 py-1.5 text-xs font-medium text-neutral-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
           @click="onApprove"
         >
           {{ approved ? 'Approved' : 'Approve' }}
@@ -444,7 +444,7 @@ export default {
               class="flex items-center gap-1.5 rounded border px-3 py-2 text-xs font-medium transition"
               :class="
                 askAgent
-                  ? 'border-violet-500 bg-violet-500/15 text-violet-300'
+                  ? 'border-neutral-300 bg-neutral-50/10 text-neutral-100'
                   : 'border-neutral-700 text-neutral-400 hover:text-neutral-100'
               "
               @click="askAgent = !askAgent"
@@ -465,7 +465,7 @@ export default {
             </button>
           </div>
 
-          <p v-if="askAgent" class="mt-1.5 text-xs text-violet-300/80">
+          <p v-if="askAgent" class="mt-1.5 text-xs text-neutral-400">
             The agent will inspect the drawn region, reply in this thread, and file a defect if it
             confirms one.
           </p>
@@ -526,7 +526,7 @@ export default {
                   </span>
                   <span
                     class="truncate text-xs font-medium"
-                    :class="item.kind === 'defect' ? 'text-violet-300' : ''"
+                    :class="item.kind === 'defect' ? 'text-neutral-100' : ''"
                   >
                     {{ item.kind === 'defect' ? 'QA agent' : item.thread.author_name }}
                   </span>
@@ -541,7 +541,7 @@ export default {
                     >
                       Resolved
                     </span>
-                    <span v-if="agentStateLabel(item.thread)" class="text-[10px] text-violet-300">
+                    <span v-if="agentStateLabel(item.thread)" class="text-[10px] text-neutral-400">
                       {{ agentStateLabel(item.thread) }}
                     </span>
                   </template>
@@ -599,7 +599,7 @@ export default {
                     >
                       <div v-for="entry in item.comments.slice(1)" :key="entry.id" class="text-sm">
                         <div class="flex items-baseline gap-2">
-                          <span class="text-xs font-medium" :class="entry.is_agent ? 'text-violet-300' : ''">
+                          <span class="text-xs font-medium" :class="entry.is_agent ? 'text-neutral-100' : ''">
                             {{ entry.author_name }}
                           </span>
                           <span class="text-[10px] text-neutral-600">{{ ago(entry.created_at) }}</span>

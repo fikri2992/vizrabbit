@@ -895,3 +895,14 @@ async def test_only_the_owner_may_delete_an_image(client, project, store, blobs)
 def test_deleting_an_unknown_image_is_a_404(client, project):
     as_user(client, OWNER)
     assert client.delete(f"/api/projects/{project}/images/nope").status_code == 404
+
+
+@pytest.mark.anyio
+async def test_delete_preview_counts_what_would_die(client, project, store, blobs):
+    await seed_image_lineage(store, blobs, project)
+    as_user(client, OWNER)
+
+    preview = client.get(f"/api/projects/{project}/images/i2/delete_preview").json()
+    assert preview == {
+        "versions": 2, "defects": 1, "threads": 1, "comments": 2, "dismissals": 1,
+    }
