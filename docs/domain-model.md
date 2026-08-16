@@ -13,6 +13,10 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 | **Clarification** | Q&A pair appended to a guideline, produced by upload-time grilling. |
 | **Grilling** | Agent interviews the user one question at a time to resolve ambiguity. Happens (a) at guideline upload, (b) on memory-rule collision. Never mid-scan. |
 | **Run** | One batch submission of N images through the pipeline. Uncapped parallel fan-out. |
+| **Slot** | One creative intent — "the hero banner". The unit of work. Holds competing variants; completes when the Owner approves one of them. |
+| **Variant** | A competing candidate for a slot, numbered from 1. Owns a linear version chain. Variants never merge and never fork: a competing fix is a new variant. |
+| **Version chain** | The strictly linear `v1 → v2 → …` lineage inside one variant, each version a re-check upload. Fixing a version that already has a successor is rejected — add a variant instead. |
+| **Archived variant** | A variant of a completed slot that did not win. Derived state, never stored: a variant is archived exactly while a *sibling* is approved. Reads as "superseded by variant N", never "rejected"; approving a different variant reverses it. |
 | **Grid** | 8×8 chess-labeled overlay (A1–H8), aspect-adapted so cells stay near-square. Labels drawn with high-contrast outline. |
 | **Suspect cell** | Grid cell flagged by the Scanner as possibly containing a defect. High recall by design. |
 | **Contact sheet** | Composite image: full original + zoomed crop (suspect cell + 1-cell margin, 2× upscale) fed to the Inspector. |
@@ -55,7 +59,8 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 - `projects` { members[{userId, role: owner|reviewer|viewer}], guidelines[], memoryRules[] } — exactly one owner
 - `guidelines` { rawText, clarifications[{question, answer}], updatedAt }
 - `runs` { projectId, images[] }
-- `images` { runId, gcsPaths{original, gridded, annotated}, version, status }
+- `slots` { projectId, name } — a creative intent; variants live on the images that point at it
+- `images` { runId, slotId, variant, gcsPaths{original, gridded, annotated}, version, status } — `slotId: ""` marks pre-slot legacy data, wrapped into a synthetic one-variant slot on read
 - `defects` { imageId, category, severity, cells[], circle{x,y,r}, confidence, status, ruleRef }
 - `comments` { defectId, author (user|agent), body, mentions[] }
 - `memoryRules` { sourceDefectId, description, active }
@@ -76,6 +81,9 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 11. Eval benchmark (week 1): ~30 images with known defects; naive single-prompt Gemini vs pipeline; recall/precision table shown in demo. Proves the workflow beats a wrapper.
 12. One accountable Brand Owner per project; resolution flows through agent re-check, never manual resolve (see Roles + lifecycle).
 10. Stack: Vue 3 + Vite + Tailwind / FastAPI + Python ADK / Firestore + GCS + Cloud Run.
+13. Slot → variants → linear version chain. Grouping is *offered* at upload (default: one slot per file), never a blocking question. Approval is per-variant and completes the slot.
+14. Archived is derived from "a sibling is approved", not a stored flag. A slot holds at most one approved variant, so approving another simply moves the approval — reversibility, and no migration, fall out of the derivation.
+15. Upload is the only review trigger. Every variant in a batch is reviewed on arrival; a fix re-checks only its own version; archiving and un-archiving never start or cancel a review, because an archived variant's verdicts stay true.
 
 ## Open items
 

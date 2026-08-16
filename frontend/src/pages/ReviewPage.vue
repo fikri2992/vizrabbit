@@ -6,6 +6,7 @@ import DefectThread from '@/components/DefectThread.vue'
 import ReviewCanvas from '@/components/ReviewCanvas.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
 import { isClear, sortDefects } from '@/domain/defects'
+import { slotCaption, variantNeighbours } from '@/domain/slots'
 import { ago } from '@/domain/time'
 import { useProjectsStore } from '@/stores/projects'
 import { useReviewStore } from '@/stores/review'
@@ -117,6 +118,19 @@ export default {
     approved() {
       return Boolean(this.activeImage?.image.approved_by)
     },
+    slotContext() {
+      return this.activeImage?.slot || null
+    },
+    slotCaption() {
+      return slotCaption(this.slotContext)
+    },
+    variantNeighbours() {
+      return variantNeighbours(this.slotContext)
+    },
+    /** A superseded variant is still readable; it just is not the one that won. */
+    archivedBy() {
+      return this.slotContext?.archived_by ?? null
+    },
   },
   watch: {
     imageId() {
@@ -208,6 +222,19 @@ export default {
         this.select(list[next])
         return
       }
+      // Comparing candidates is the reason variants exist, so give it a key.
+      const sideways = { '[': 'previous', ']': 'next' }[event.key]
+      if (sideways) {
+        const target = this.variantNeighbours[sideways]
+        if (target) {
+          event.preventDefault()
+          this.$router.push({
+            name: 'review',
+            params: { projectId: this.projectId, imageId: target.image_id },
+          })
+        }
+        return
+      }
       const tool = { v: 'select', c: 'circle', r: 'rect', a: 'arrow', p: 'path' }[event.key]
       if (tool && this.can('comment')) this.tool = tool
       if (event.key === 'Escape') {
@@ -276,7 +303,11 @@ export default {
     async onApprove() {
       try {
         await this.approveImage(this.projectId, this.imageId)
-        this.notice = 'Approved.'
+        await this.fetchImage(this.projectId, this.imageId)
+        const siblings = (this.slotContext?.variant_count ?? 1) - 1
+        this.notice = siblings
+          ? `Approved. This slot is complete — ${siblings} other variant${siblings === 1 ? '' : 's'} archived.`
+          : 'Approved.'
       } catch (error) {
         this.notice = error.message
       }
@@ -292,7 +323,11 @@ export default {
           : `Version ${result.version.version} uploaded. Nothing was open to re-check.`
         this.versions = await this.fetchVersions(this.projectId, this.imageId)
       } catch (error) {
-        this.notice = error.message
+        // A fork is not a failure, it is a different action: this version has
+        // already been fixed once, so the competing attempt belongs in a variant.
+        this.notice = error.message.includes('409')
+          ? 'This version already has a fix. Add a competing variant from the slot card instead.'
+          : error.message
       }
     },
     ago,
@@ -320,7 +355,40 @@ export default {
         </svg>
       </RouterLink>
 
-      <h2 class="truncate text-sm font-semibold">{{ activeImage.image.filename }}</h2>
+      <div class="min-w-0">
+        <h2 class="truncate text-sm font-semibold">{{ activeImage.image.filename }}</h2>
+        <p v-if="slotCaption" class="truncate text-[11px] text-neutral-500">
+          {{ slotCaption }}
+        </p>
+      </div>
+
+      <!-- Competing candidates sit side by side; stepping between them is the
+           comparison affordance, so it lives next to the title. -->
+      <div v-if="slotContext && slotContext.variant_count > 1" class="flex items-center gap-1">
+        <RouterLink
+          v-for="sibling in slotContext.siblings"
+          :key="sibling.variant"
+          :to="{ name: 'review', params: { projectId, imageId: sibling.image_id } }"
+          class="rounded-full px-2 py-0.5 text-xs ring-1 ring-inset"
+          :class="[
+            sibling.variant === slotContext.variant
+              ? 'bg-neutral-100 text-neutral-900 ring-neutral-100'
+              : 'text-neutral-400 ring-neutral-700 hover:text-neutral-100',
+            sibling.archived ? 'opacity-60' : '',
+          ]"
+          :title="sibling.approved ? 'Approved variant' : sibling.archived ? 'Superseded' : ''"
+        >
+          {{ sibling.approved ? '★ ' : '' }}V{{ sibling.variant }}
+        </RouterLink>
+      </div>
+
+      <span
+        v-if="archivedBy !== null"
+        class="rounded-full bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-400"
+        :title="`Variant ${archivedBy} was approved for this slot`"
+      >
+        Superseded by variant {{ archivedBy }}
+      </span>
 
       <span class="flex items-center gap-1.5 text-xs font-medium text-neutral-300">
         <span

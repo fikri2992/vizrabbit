@@ -25,6 +25,7 @@ from app.domain.entities import (
     ReviewThread,
     Run,
     RunStatus,
+    Slot,
     User,
     now,
 )
@@ -37,6 +38,7 @@ from app.infra import repository as repo
 from app.infra.events import Event, EventBus
 from app.infra.storage import ANNOTATED, GRIDDED, ORIGINAL, BlobStore, blob_path
 from app.infra.store import Store
+from app.services import slots as slot_service
 from app.services.review import notify
 
 
@@ -95,7 +97,34 @@ async def delete_image(
             if path:
                 await blobs.delete(path)
         await repo.delete(store, ImageAsset, asset.id)
+
+    # A slot with no variants left is not a slot any more.
+    if image.slot_id and not await repo.images_for_slot(store, image.slot_id):
+        await repo.delete(store, Slot, image.slot_id)
     return [asset.id for asset in lineage]
+
+
+async def delete_slot(
+    store: Store, blobs: BlobStore, project: Project, user: User, slot_id: str
+) -> list[str]:
+    """Owner removes a whole creative intent: every variant, every version, the lot."""
+    require(project, user.id, Permission.DELETE_IMAGE)
+
+    group = next(
+        (g for g in await slot_service.project_slots(store, project.id) if g.slot_id == slot_id),
+        None,
+    )
+    if group is None:
+        raise ValueError("slot not found in this project")
+
+    removed: list[str] = []
+    for chain in group.variants:
+        removed += await delete_image(store, blobs, project, user, chain.root)
+
+    # Synthetic slots have no document to remove — they only ever existed on read.
+    if not group.synthetic:
+        await repo.delete(store, Slot, slot_id)
+    return removed
 
 
 async def assemble_guidelines(store: Store, project_id: str) -> str:
@@ -121,27 +150,50 @@ async def assemble_guidelines(store: Store, project_id: str) -> str:
     return "\n\n---\n\n".join(sections)
 
 
+def _slot_name(filename: str) -> str:
+    """A slot's default label is the file that opened it, extension dropped."""
+    return filename.rsplit(".", 1)[0].strip() or filename
+
+
 async def create_run(
     store: Store,
     blobs: BlobStore,
     project: Project,
     user: User,
     uploads: list[tuple[str, bytes]],
+    group_into: str | None = None,
 ) -> Run:
-    """Persist an upload batch and return the queued run."""
+    """Persist an upload batch and return the queued run.
+
+    ``group_into`` is how the staging strip's one control reaches the domain:
+    ``None`` gives every file its own slot (the default, and what pre-slot upload
+    did), ``"new"`` makes the batch the competing variants of one fresh slot, and
+    a slot id appends the batch to that slot as further variants.
+    """
     require(project, user.id, Permission.UPLOAD_IMAGES)
     if not uploads:
         raise ValueError("a run needs at least one image")
 
     run = Run(id=new_id(), project_id=project.id, started_by=user.id)
+    shared_slot_id, next_variant = await _grouping_target(store, project, uploads, group_into)
 
     for filename, data in uploads:
+        if shared_slot_id:
+            slot_id, variant = shared_slot_id, next_variant
+            next_variant += 1
+        else:
+            slot = await slot_service.create_slot(store, project.id, _slot_name(filename))
+            slot_id, variant = slot.id, 1
+
         image = from_bytes(data)
         asset = ImageAsset(
             id=new_id(),
             project_id=project.id,
             run_id=run.id,
             filename=filename,
+            slot_id=slot_id,
+            variant=variant,
+            uploaded_by=user.id,
             width=image.width,
             height=image.height,
         )
@@ -153,6 +205,29 @@ async def create_run(
 
     await repo.save(store, run)
     return run
+
+
+async def _grouping_target(
+    store: Store,
+    project: Project,
+    uploads: list[tuple[str, bytes]],
+    group_into: str | None,
+) -> tuple[str, int]:
+    """Resolve ``group_into`` to (shared slot id, first variant ordinal).
+
+    An empty slot id means "no shared slot" — each file opens its own.
+    """
+    if group_into is None:
+        return "", 1
+    if group_into == "new":
+        slot = await slot_service.create_slot(store, project.id, _slot_name(uploads[0][0]))
+        return slot.id, 1
+
+    groups = await slot_service.project_slots(store, project.id)
+    existing = next((g for g in groups if g.slot_id == group_into), None)
+    if existing is None:
+        raise ValueError("slot not found in this project")
+    return existing.slot_id, existing.next_variant
 
 
 async def execute_run(
@@ -203,6 +278,18 @@ async def execute_run(
         link=f"/projects/{project.id}/runs/{run.id}",
     )
     return run
+
+
+async def review_one(
+    store: Store, blobs: BlobStore, bus: EventBus, project: Project, run: Run, image_id: str
+) -> None:
+    """Review a single freshly-uploaded image outside a batch.
+
+    A variant added to an existing slot is new work and gets the same treatment as
+    a batch upload (decision 15) — one image, same pipeline, same events.
+    """
+    guidelines = await assemble_guidelines(store, project.id)
+    await _process_one(store, blobs, bus, project, run, image_id, guidelines)
 
 
 def _concurrency() -> int:

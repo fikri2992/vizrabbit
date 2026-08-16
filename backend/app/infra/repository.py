@@ -21,6 +21,7 @@ from app.domain.entities import (
     Project,
     ReviewThread,
     Run,
+    Slot,
     User,
 )
 from app.infra.store import Document, Store
@@ -33,6 +34,7 @@ COLLECTIONS: dict[type[BaseModel], str] = {
     Guideline: "guidelines",
     MemoryRule: "memory_rules",
     Run: "runs",
+    Slot: "slots",
     ImageAsset: "images",
     DefectRecord: "defects",
     DismissalRecord: "dismissals",
@@ -114,6 +116,18 @@ async def projects_for_user(store: Store, user_id: str) -> list[Project]:
 
 async def images_for_run(store: Store, run_id: str) -> list[ImageAsset]:
     return await find(store, ImageAsset, where={"run_id": run_id}, order_by="created_at")
+
+
+async def images_for_project(store: Store, project_id: str) -> list[ImageAsset]:
+    return await find(store, ImageAsset, where={"project_id": project_id}, order_by="created_at")
+
+
+async def images_for_slot(store: Store, slot_id: str) -> list[ImageAsset]:
+    return await find(store, ImageAsset, where={"slot_id": slot_id}, order_by="created_at")
+
+
+async def slots_for_project(store: Store, project_id: str) -> list[Slot]:
+    return await find(store, Slot, where={"project_id": project_id}, order_by="created_at")
 
 
 async def defects_for_image(store: Store, image_id: str) -> list[DefectRecord]:

@@ -21,6 +21,7 @@ from app.domain.entities import (
 from app.domain.grid import Grid
 from app.domain.lifecycle import DefectState, assert_transition
 from app.domain.permissions import Permission, require
+from app.domain.slots import successor_of
 from app.imaging.canvas import from_bytes, to_png_bytes
 from app.imaging.grid_overlay import apply_grid
 from app.infra import repository as repo
@@ -31,6 +32,10 @@ from app.services.review import notify
 
 #: States a defect can be in and still be worth re-checking.
 AWAITING_FIX = frozenset({DefectState.OPEN, DefectState.NEEDS_HUMAN_REVIEW})
+
+
+class ForkedChain(ValueError):
+    """Raised when a fix would branch a version chain. The answer is a new variant."""
 
 
 def new_id() -> str:
@@ -52,13 +57,26 @@ async def submit_fix(
     """
     require(project, user.id, Permission.SUBMIT_FIX)
 
+    # Version chains are strictly linear: a second fix of the same version would
+    # fork it, and a fork is what variants are for (domain-model.md decision 13).
+    siblings = await repo.images_for_project(store, project.id)
+    already = successor_of(siblings, original)
+    if already is not None:
+        raise ForkedChain(
+            f"v{already.version} already fixes this version — "
+            "add a competing variant to the slot instead of forking the chain"
+        )
+
     image = from_bytes(data)
     version = ImageAsset(
         id=new_id(),
         project_id=project.id,
         run_id=original.run_id,
         filename=filename or original.filename,
+        slot_id=original.slot_id,
+        variant=original.variant,
         version=original.version + 1,
+        uploaded_by=user.id,
         supersedes_id=original.id,
         width=image.width,
         height=image.height,

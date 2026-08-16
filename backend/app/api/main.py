@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api import auth, projects, review, runs, threads
+from app.api import auth, projects, review, runs, slots, threads
 from app.config import settings
 
 app = FastAPI(title="Visual QA Agent", version="0.1.0")
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(runs.router)
+app.include_router(slots.router)
 app.include_router(review.router)
 app.include_router(review.notifications_router)
 app.include_router(threads.router)

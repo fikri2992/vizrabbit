@@ -138,17 +138,39 @@ per-variant, the slot completes on first approval, siblings archive.
 Tasks:
 - `domain/entities.py`: `Slot` entity; `ImageAsset` gains `slot_id` and
   `variant` ordinal; archived state for losing variants
-- Upload flow asks: new slots (one per file) or variants of one slot
+- Upload flow *offers* grouping, never asks: staging strip of file chips,
+  default = each file its own slot (zero extra clicks, matches legacy); select
+  chips + "variants of one slot" to group. New variants can also be added to an
+  existing slot from its card (the competing-fix escape hatch)
 - Migration shim: legacy flat images each auto-wrap in their own slot on read —
   zero data loss, no manual migration step
 - Approval semantics: approve variant → slot complete → siblings archived
   (reversible by approving another variant); needs-review counts exclude
-  archived variants
+  archived variants. Archived carries a reason: "superseded by variant N"
+  (sibling won) vs "defects unresolved" — surfaced as tooltip, never rendered
+  as "rejected"
 - Delete: variant delete removes its version chain; slot delete removes
   everything (consequence modal counts extend accordingly)
 - History UI: 2-level tree on the slot card — variants as columns, versions as
-  a vertical chain, verdict dot per node, click-through to review
-- Review screen header shows slot context (variant 2 of 3, v2)
+  a vertical chain top-down; each node shows version + uploader + date +
+  verdict color, click-through to that version's review. Winner column ends
+  with an approval-stamp node (who approved, when). No cross-column arrows
+  ever — across = alternatives, down = time
+- Review trigger: upload is the only trigger — every variant in a batch gets
+  its own review on upload; a fix upload re-reviews just that version.
+  Archiving/un-archiving never triggers or cancels reviews (old verdicts stay
+  valid)
+- Slot card headline = best variant's state: any approved → complete; else
+  any clean-awaiting-human → "ready to pick"; else in review
+- Review screen header shows slot context (variant 2 of 3, v2) with
+  prev/next-variant navigation for comparison
+
+**Landed 2026-08-16.** Archived state turned out to be derivable rather than
+stored (domain-model.md decision 14): a variant is archived exactly while a
+sibling is approved, so reversibility and the zero-write legacy read path both
+fall out of the same derivation, and there is no migration to run. Two entity
+fields carry the whole remodel — `slot_id` and `variant` — plus `uploaded_by`,
+which the history tree needed and nothing recorded before.
 
 **Gate 6 (quantified):**
 - Every pre-existing backend test still green (no behavioural regressions)
@@ -160,6 +182,15 @@ Tasks:
   slot shows complete, siblings show archived
 - A legacy project (pre-slot data) loads with every image visible and
   reviewable, zero manual steps
+
+Gate 6 evidence (2026-08-16): 733 backend tests green (690 pre-existing
+unchanged, +43 new), 50 frontend tests green. Browser-verified against the
+seeded demo — grouped upload of 3 files produced one slot with 3 variants; the
+history tree drew 3 columns with uploader, date and verdict per node plus the
+approval stamp; the two archived columns read "Superseded by variant 2" and
+"Superseded by variant 2 · 1 defect left open"; re-approving a different variant
+moved the win and left exactly one approved variant; the pre-slot demo image
+listed as a synthetic slot with the `slots` collection still empty.
 
 ## Phase 7 — Brand guardian: palette (Aug 20–22)
 

@@ -105,7 +105,15 @@ async def override_severity(
 async def approve_image(
     store: Store, project: Project, image: ImageAsset, user: User
 ) -> ImageAsset:
-    """ "Approved" means the Brand Owner said so — nothing else sets this."""
+    """ "Approved" means the Brand Owner said so — nothing else sets this.
+
+    Approval is per-variant and it completes the slot: the sibling variants become
+    archived, which is derived from this one approval rather than written onto
+    them (domain-model.md decision 14). Approving a different variant later just
+    moves the approval, so the pick is reversible and nothing needs undoing.
+    """
+    from app.services import slots as slot_service
+
     require(project, user.id, Permission.APPROVE_IMAGE)
 
     if image.status is not ImageStatus.DONE:
@@ -121,10 +129,14 @@ async def approve_image(
             f"{len(outstanding)} defect(s) still open — resolve, dismiss or override them first"
         )
 
-    image.approved_by = user.id
-    image.approved_at = now()
-    await repo.save(store, image)
-    return image
+    group = await slot_service.slot_containing(store, image)
+    if group is None:  # no slot context at all: approve the lone image
+        image.approved_by = user.id
+        image.approved_at = now()
+        await repo.save(store, image)
+        return image
+
+    return await slot_service.apply_approval(store, group, image, user.id)
 
 
 async def propose_memory_rule(

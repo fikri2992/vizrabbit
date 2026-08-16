@@ -118,6 +118,20 @@ class Run(BaseModel):
     finished_at: datetime | None = None
 
 
+class Slot(BaseModel):
+    """One creative intent — the unit of work. Variants compete inside it.
+
+    Deliberately thin: which variants belong to it, which one won, and whether it
+    is complete are all derived from the images that point here (decision 14), so
+    there is no slot state that can drift out of step with them.
+    """
+
+    id: str
+    project_id: str
+    name: str = ""
+    created_at: datetime = Field(default_factory=now)
+
+
 class ImageStatus(StrEnum):
     QUEUED = "queued"
     SCANNING = "scanning"
@@ -131,7 +145,13 @@ class ImageAsset(BaseModel):
     project_id: str
     run_id: str
     filename: str
+    #: Empty on pre-slot data; ``domain.slots`` wraps those in a synthetic slot on read.
+    slot_id: str = ""
+    #: Which competing candidate of the slot this is, numbered from 1.
+    variant: int = 1
     version: int = 1
+    #: Who put this version here. Empty on data that predates per-version attribution.
+    uploaded_by: str = ""
     #: Set when this image is a re-upload fixing an earlier version.
     supersedes_id: str | None = None
     width: int = 0
