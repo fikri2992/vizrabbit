@@ -316,7 +316,7 @@ async def seed_video_slot(store, blobs) -> None:
             check=True,
             capture_output=True,
         )
-        data = open(path, "rb").read()
+        data = Path(path).read_bytes()
 
     run = Run(
         id="r-video",
