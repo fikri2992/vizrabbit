@@ -234,6 +234,16 @@ export default {
       }
     },
 
+    /**
+     * Back means "where I came from" — the tree, the cards, compare — not a
+     * hardcoded destination. Only a cold-opened tab (no in-app history) falls
+     * back to the project page.
+     */
+    goBack() {
+      if (window.history.state?.back) this.$router.back()
+      else this.$router.push({ name: 'project', params: { projectId: this.projectId } })
+    },
+
     async select(item) {
       this.selectedId = item.id
       if (item.kind === 'defect') await this.openThread(this.projectId, item.id)
@@ -430,15 +440,16 @@ export default {
   <div v-if="activeImage" class="flex h-[calc(100vh-53px)] flex-col">
     <!-- Top bar -->
     <header class="flex items-center gap-3 border-b border-neutral-800 px-4 py-2">
-      <RouterLink
-        :to="{ name: 'project', params: { projectId } }"
+      <button
+        type="button"
         class="text-neutral-400 hover:text-neutral-100"
-        aria-label="Back to project"
+        aria-label="Back"
+        @click="goBack"
       >
         <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-      </RouterLink>
+      </button>
 
       <div class="min-w-0">
         <h2 class="truncate text-sm font-semibold">{{ activeImage.image.filename }}</h2>
