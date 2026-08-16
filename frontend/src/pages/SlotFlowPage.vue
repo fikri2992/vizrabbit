@@ -667,7 +667,7 @@ export default {
       v-if="comparing"
       :project-id="projectId"
       :nodes="nodes"
-      @close="$router.replace({ query: { ...$route.query, compare: undefined, mode: undefined } })"
+      @close="$router.replace({ query: { ...$route.query, compare: undefined, mode: undefined, left: undefined } })"
     />
 
     <!-- ═══ version rail: what is selected, and what you can do to it ═══ -->

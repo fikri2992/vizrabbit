@@ -14,7 +14,13 @@ export default {
   },
   emits: ['close'],
   data() {
-    const [left, right] = comparePair(this.nodes) || [null, null]
+    let [left, right] = comparePair(this.nodes) || [null, null]
+    // Arriving from a version's review screen: that version takes the left side.
+    const asked = this.$route.query.left
+    if (asked && this.nodes.some((n) => n.id === asked)) {
+      if (asked === right) right = left
+      left = asked
+    }
     return {
       leftId: left,
       rightId: right,

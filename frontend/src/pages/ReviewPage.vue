@@ -448,6 +448,18 @@ export default {
         >
           {{ sibling.approved ? '★ ' : '' }}V{{ sibling.variant }}
         </RouterLink>
+        <!-- Seeing the difference beats remembering it (decision 25). -->
+        <RouterLink
+          :to="{
+            name: 'slot-flow',
+            params: { projectId, slotId: slotContext.slot_id },
+            query: { compare: '1', left: imageId },
+          }"
+          class="ml-1 rounded-full px-2 py-0.5 text-xs text-neutral-400 ring-1 ring-inset ring-neutral-700 hover:text-neutral-100"
+          title="Compare versions side by side"
+        >
+          ⇔ Compare
+        </RouterLink>
       </div>
 
       <span
