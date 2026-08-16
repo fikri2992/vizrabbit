@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     #   variant that re-enters review (decision 24). One call per animate
     #   request, Owner-only.
     model_video: str = "veo-3.0-generate-001"
+    #   Gemini Live: voice as an input mode for question threads (phase 14).
+    #   The browser connects directly with a server-minted constrained token;
+    #   the model's whole authority is the tool list in agents/voice.py.
+    model_live: str = "gemini-live-2.5-flash-preview"
+
+    #: How long a voice session token stays mintable/usable, in minutes.
+    voice_token_minutes: int = 10
 
     # Veo runs as a long-running operation; these bound the polling loop.
     animate_poll_seconds: float = 5.0

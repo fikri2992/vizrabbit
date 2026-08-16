@@ -227,6 +227,13 @@ export const useReviewStore = defineStore('review', {
     },
 
     /** Answer a needs-human question. Either answer teaches (decision 19). */
+    /** Mint a constrained Live token for talking through this image's questions
+     *  (phase 14). Throws on 409 (nothing to discuss) / 503 (no credentials) —
+     *  callers hide the control rather than surface an error. */
+    async openVoiceSession(projectId, imageId) {
+      return api.post(`/api/projects/${projectId}/images/${imageId}/voice/session`)
+    },
+
     async answerQuestion(projectId, defectId, confirmed) {
       const result = await api.post(`/api/projects/${projectId}/defects/${defectId}/answer`, {
         confirmed,

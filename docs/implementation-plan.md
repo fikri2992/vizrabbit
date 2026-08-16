@@ -461,6 +461,26 @@ Tasks:
   tolerance widening) as the button — byte-equal defect record, asserted
 - Browser demo: answer 2 seeded questions by voice end-to-end
 
+**Landed 2026-08-16 — architecture differs from the task list, deliberately.**
+No session proxy: the server's one job is minting a *constrained* ephemeral
+token (`agents/voice.py` — model, system prompt and tool list locked
+server-side via `LiveConnectConstraints`), and the browser connects to the
+Live API directly. Tool calls come back to the browser, which executes them
+through the ordinary answer endpoint with the user's own session — so a
+spoken answer is byte-identical to a clicked one *by construction* (same
+endpoint; the byte-equality gate item collapses into test_questions.py), and
+the model never holds credentials to our API. Gate evidence: 7 tests — the
+tool list is exactly {answer_question, next_question, previous_question},
+answer carries only defect_id+confirmed (no state names), no declaration
+mentions any other lifecycle move, session endpoint 409s with no questions /
+503s without credentials / carries the open queue in order. Browser-verified:
+"Talk through 2 questions" renders on the seeded demo, the click reaches the
+endpoint, the SDK token call is attempted and refused (no usable credentials
+here), and the control hides silently — the full degrade chain. **The audio
+client (`VoicePanel.vue`) and a real Live conversation have never run —
+needs credentials, and the `model_live` id needs verifying then (Deferred
+evidence).**
+
 ## Phase 15 — Veo export extension
 
 From Phase 8's dead-end-closer: an approved still can be extended into a
@@ -542,9 +562,11 @@ each item names what the submission says without it.
   untested half of Gate 7. Without it, cite the mechanical recall 1.00 only.
 - **Brand extraction** (`scripts/check_brand_extraction.py` + a real brand
   PDF, needs credentials).
-- **Editor + animator smoke-run** (needs credentials): one real nano-banana
-  draft and one real Veo animation on the seeded demo — `agents/editor.py`
-  and `agents/animator.py` have never been exercised live.
+- **Editor + animator + voice smoke-run** (needs credentials): one real
+  nano-banana draft, one real Veo animation, and one real Live conversation
+  on the seeded demo — `agents/editor.py`, `agents/animator.py` and the
+  browser voice client have never been exercised live. Verify the pinned
+  `model_video` and `model_live` ids while at it.
 - **Gate 3 leftovers**: 5 real fixed-image pairs (depends on the eval set);
   timed 5-minute demo-script run; memory-rule roundtrip on a planted image.
 - **Gate 4 re-verification**: current main is ~13 commits past the deployed

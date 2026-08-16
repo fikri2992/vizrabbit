@@ -5,7 +5,8 @@ import ActivityFeed from '@/components/ActivityFeed.vue'
 import DefectThread from '@/components/DefectThread.vue'
 import ReviewCanvas from '@/components/ReviewCanvas.vue'
 import SeverityChip from '@/components/SeverityChip.vue'
-import { isClear, sortDefects } from '@/domain/defects'
+import VoicePanel from '@/components/VoicePanel.vue'
+import { isClear, isQuestion, sortDefects } from '@/domain/defects'
 import { slotCaption, variantNeighbours } from '@/domain/slots'
 import { ago } from '@/domain/time'
 import { useProjectsStore } from '@/stores/projects'
@@ -31,7 +32,7 @@ const AGENT_STATE_LABEL = {
 
 export default {
   name: 'ReviewPage',
-  components: { ActivityFeed, DefectThread, ReviewCanvas, SeverityChip },
+  components: { ActivityFeed, DefectThread, ReviewCanvas, SeverityChip, VoicePanel },
   props: {
     projectId: { type: String, required: true },
     imageId: { type: String, required: true },
@@ -53,6 +54,8 @@ export default {
       versions: [],
       placement: null, // phase 9 advisories for the run's declared platform
       placementOverlay: false,
+      voiceSession: null, // phase 14: an open Live session, or null
+      voiceHidden: false, // a failed request hides the control silently
       replyDrafts: {},
       tools: TOOLS,
       colors: COLORS,
@@ -117,6 +120,10 @@ export default {
     everythingClosed() {
       return isClear(this.defects)
     },
+    /** The agent's unanswered questions on this image — what voice talks through. */
+    openQuestions() {
+      return this.defects.filter((defect) => isQuestion(defect))
+    },
     /** Video defects with a shot range — what the timeline draws. */
     timedDefects() {
       return this.defects.filter((defect) => typeof defect.time_start === 'number')
@@ -177,6 +184,7 @@ export default {
       'comment',
       'transition',
       'answerQuestion',
+      'openVoiceSession',
       'proposeMemoryRule',
       'approveImage',
       'submitFix',
@@ -193,6 +201,7 @@ export default {
       this.finishedNotice = ''
       this.selectedId = ''
       this.pendingShapes = []
+      this.voiceSession = null
       await useProjectsStore().fetchOne(this.projectId)
       await this.fetchImage(this.projectId, this.imageId)
       this.fetchThreads(this.projectId, this.imageId)
@@ -326,6 +335,32 @@ export default {
       } catch (error) {
         this.notice = error.message
       }
+    },
+    /** Phase 14: open a constrained Live session. Any refusal hides the control. */
+    async startVoice() {
+      try {
+        this.voiceSession = await this.openVoiceSession(this.projectId, this.imageId)
+      } catch {
+        this.voiceHidden = true
+      }
+    },
+    /** A spoken answer is the clicked one: the exact same store action. */
+    async onVoiceAnswer({ defectId, confirmed }) {
+      try {
+        const result = await this.answerQuestion(this.projectId, defectId, confirmed)
+        this.notice = result.adjustment || (confirmed ? 'Kept as a real defect.' : 'Dismissed.')
+      } catch (error) {
+        this.notice = error.message
+      }
+    },
+    onVoiceNavigate(step) {
+      const questions = this.railItems.filter(
+        (item) => item.kind === 'defect' && isQuestion(item.defect),
+      )
+      if (!questions.length) return
+      const current = questions.findIndex((item) => item.id === this.selectedId)
+      const next = (current + step + questions.length) % questions.length
+      this.select(questions[next])
     },
     async onProposeMemory(description) {
       const proposal = await this.proposeMemoryRule(this.projectId, this.selectedId, description)
@@ -804,6 +839,30 @@ export default {
 
           <!-- Comments tab: one rail, agent and humans together -->
           <template v-if="tab === 'comments'">
+            <!-- Phase 14: voice as an input mode for the agent's questions.
+                 The control exists only while questions are open, and hides
+                 itself the moment the backend says voice is unavailable. -->
+            <div
+              v-if="openQuestions.length && can('comment') && !voiceHidden"
+              class="border-b border-neutral-800/70 px-3 py-2.5"
+            >
+              <button
+                v-if="!voiceSession"
+                type="button"
+                class="w-full rounded-md border border-violet-500/40 px-3 py-1.5 text-xs text-violet-200 transition hover:bg-violet-500/10"
+                @click="startVoice"
+              >
+                🎙 Talk through {{ openQuestions.length }} question{{ openQuestions.length === 1 ? '' : 's' }}
+              </button>
+              <VoicePanel
+                v-else
+                :session="voiceSession"
+                @answer="onVoiceAnswer"
+                @navigate="onVoiceNavigate"
+                @closed="voiceSession = null"
+              />
+            </div>
+
             <div v-if="railItems.length" class="divide-y divide-neutral-800/70">
               <article
                 v-for="item in railItems"

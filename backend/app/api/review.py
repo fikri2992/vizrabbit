@@ -3,7 +3,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.deps import ProjectDep, StoreDep, UserDep
+from app.agents import voice
+from app.api.deps import ProjectDep, StoreDep, UserDep, guard
+from app.config import settings
 from app.domain.entities import (
     Comment,
     DefectRecord,
@@ -13,7 +15,7 @@ from app.domain.entities import (
     Project,
 )
 from app.domain.lifecycle import DefectState, allowed_transitions
-from app.domain.permissions import PermissionError_
+from app.domain.permissions import Permission, PermissionError_
 from app.domain.taxonomy import Severity
 from app.infra import repository as repo
 from app.services import review as service
@@ -133,6 +135,46 @@ async def answer_question(
     except (PermissionError_, ValueError) as exc:
         raise _translate(exc) from exc
     return QuestionAnswered(defect=updated, adjustment=adjustment)
+
+
+class VoiceSession(BaseModel):
+    """Everything the browser needs to open a constrained Live session."""
+
+    token: str
+    model: str
+    #: The queue, in order — the browser highlights these as they are discussed.
+    question_ids: list[str]
+
+
+@router.post("/images/{image_id}/voice/session")
+async def open_voice_session(
+    image_id: str, project: ProjectDep, store: StoreDep, user: UserDep
+) -> VoiceSession:
+    """Mint a constrained token for talking through this image's questions.
+
+    The token locks model, prompt and tool list server-side (phase 14); the
+    browser executes any tool call through the ordinary answer endpoint with
+    the user's own session, so a spoken answer IS the clicked one. 409 when
+    there is nothing to talk about; 503 when the deployment has no model
+    credentials — the UI degrades to the buttons silently either way.
+    """
+    guard(project, user, Permission.COMMENT)
+    defects = await repo.defects_for_image(store, image_id)
+    questions = [d for d in defects if d.status is DefectState.NEEDS_HUMAN_REVIEW]
+    if not questions:
+        raise HTTPException(409, "no open questions on this image")
+    if not settings.google_api_key and not settings.use_vertex_ai:
+        raise HTTPException(503, "voice is unavailable — no model credentials")
+
+    try:
+        token = await voice.mint_session_token(questions)
+    except Exception as exc:  # noqa: BLE001 — degrade, never break the review page
+        raise HTTPException(503, f"voice is unavailable — {exc}") from exc
+    return VoiceSession(
+        token=token,
+        model=settings.model_live,
+        question_ids=[d.id for d in questions],
+    )
 
 
 @router.post("/defects/{defect_id}/severity")
