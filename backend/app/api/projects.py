@@ -6,13 +6,14 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.agents.schemas import GuidelineGrilling, GuidelineQuestion
-from app.api.deps import ProjectDep, StoreDep, UserDep, guard
+from app.api.deps import BlobsDep, ProjectDep, StoreDep, UserDep, guard
 from app.domain.entities import BrandProfile, Guideline, Member, PaletteEntry, Project, Role
 from app.domain.permissions import Permission, permissions_for, validate_membership
 from app.imaging import documents
 from app.infra import repository as repo
 from app.services import brand as brand_service
 from app.services import guidelines as guideline_service
+from app.services import projects as project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -65,6 +66,44 @@ async def create_project(body: CreateProject, store: StoreDep, user: UserDep) ->
 @router.get("/{project_id}")
 async def get_project(project: ProjectDep, user: UserDep) -> ProjectView:
     return _view(project, user.id)
+
+
+class RenameProject(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+@router.post("/{project_id}/name")
+async def rename_project(
+    body: RenameProject, project: ProjectDep, store: StoreDep, user: UserDep
+) -> ProjectView:
+    guard(project, user, Permission.RENAME_PROJECT)
+    try:
+        renamed = await project_service.rename(store, project, user, body.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _view(renamed, user.id)
+
+
+@router.get("/{project_id}/delete_preview")
+async def project_delete_preview(
+    project: ProjectDep, store: StoreDep, user: UserDep
+) -> dict[str, int]:
+    """What deleting this project would destroy — shown before the Owner confirms."""
+    guard(project, user, Permission.DELETE_PROJECT)
+    return await project_service.delete_preview(store, project)
+
+
+@router.delete("/{project_id}")
+async def delete_project(
+    project: ProjectDep, store: StoreDep, blobs: BlobsDep, user: UserDep
+) -> dict[str, int]:
+    """Owner destroys the project: every slot, image, defect, thread and blob.
+
+    Returns what was actually removed rather than 204, because the counts can
+    differ from the preview if a run landed in between.
+    """
+    guard(project, user, Permission.DELETE_PROJECT)
+    return await project_service.delete_project(store, blobs, project, user)
 
 
 @router.post("/{project_id}/members", status_code=201)

@@ -36,6 +36,9 @@ class Permission(StrEnum):
     #: Turns an extracted palette into one the pipeline enforces. Owner-only because
     #: confirming it is what makes brand defects the Owner's to answer for.
     CONFIRM_BRAND_PROFILE = "confirm_brand_profile"
+    RENAME_PROJECT = "rename_project"
+    #: Destroys the project and everything in it. The most consequential action here.
+    DELETE_PROJECT = "delete_project"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
