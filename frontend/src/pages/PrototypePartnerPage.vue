@@ -59,6 +59,7 @@ export default {
   data() {
     return {
       view: 'project', // project | slot
+      tab: 'assets', // assets | activity
       morning: false, // has time passed yet
       overnight: '', // fake-latency line while the night "runs"
       showNew: true,
@@ -68,10 +69,10 @@ export default {
       selected: null,
       picked: false,
       tealAnswered: '',
-      debriefDone: {},
+      tealOpen: false,
+      stripDismissed: false,
       toasts: [],
       toastSeq: 0,
-      feedOpen: false,
     }
   },
   computed: {
@@ -80,25 +81,6 @@ export default {
     },
     byId() {
       return Object.fromEntries(this.tree.map((node) => [node.id, node]))
-    },
-    /** What only the human can decide — the debrief's second half. */
-    decisions() {
-      return [
-        {
-          id: 'pick',
-          text: 'Pick the hero. My call: the fix I drafted (v2) — it clears both defects and the headline now reads 4.8:1.',
-          cite: 'the other clean option crops into the product',
-          go: 'slot',
-          label: 'See it in the tree',
-        },
-        {
-          id: 'teal',
-          text: 'Is this teal (#2aa47d) within brand? I have been wrong about teal twice, so I am asking instead of flagging.',
-          cite: 'ΔE 2.2 from your confirmed teal — inside tolerance, but on a CTA',
-          label: 'Yes, in brand',
-          secondary: 'No, flag it',
-        },
-      ]
     },
     judgmentFeed() {
       return [
@@ -128,19 +110,16 @@ export default {
       this.morning = true
       this.tree = morningTree()
       this.selected = 'b'
-      this.toast('Good morning. The debrief is at the top — start there.')
     },
 
     answerTeal(inBrand) {
       this.tealAnswered = inBrand
-        ? 'Confirmed in-brand — teal tolerance widened, I will stop second-guessing it.'
-        : 'Flagged. And noted: CTA colours get the strict treatment.'
-      this.debriefDone = { ...this.debriefDone, teal: true }
+        ? 'in brand — noted, tolerance widened'
+        : 'flagged — CTA colours get the strict treatment'
     },
 
     makePick() {
       this.picked = true
-      this.debriefDone = { ...this.debriefDone, pick: true }
       this.toast('Recorded: approved by you, on my recommendation. Your reasons, not mine, go in the audit line.')
     },
     discardDraft() {
@@ -175,6 +154,7 @@ export default {
     reset() {
       Object.assign(this.$data, {
         view: 'project',
+        tab: 'assets',
         morning: false,
         overnight: '',
         staged: false,
@@ -183,8 +163,8 @@ export default {
         selected: null,
         picked: false,
         tealAnswered: '',
-        debriefDone: {},
-        feedOpen: false,
+        tealOpen: false,
+        stripDismissed: false,
       })
     },
   },
@@ -209,10 +189,39 @@ export default {
       </header>
 
       <nav class="mt-4 flex gap-5 border-b border-edge text-sm">
-        <span class="-mb-px border-b-2 border-neutral-100 pb-2.5 font-medium text-neutral-100">Slots 3</span>
-        <span class="pb-2.5 text-neutral-500">Activity</span>
+        <button
+          type="button"
+          class="-mb-px border-b-2 pb-2.5"
+          :class="tab === 'assets' ? 'border-neutral-100 font-medium text-neutral-100' : 'border-transparent text-neutral-500'"
+          @click="tab = 'assets'"
+        >
+          Slots 3
+        </button>
+        <button
+          type="button"
+          class="-mb-px border-b-2 pb-2.5"
+          :class="tab === 'activity' ? 'border-neutral-100 font-medium text-neutral-100' : 'border-transparent text-neutral-500'"
+          @click="tab = 'activity'"
+        >
+          Activity
+        </button>
         <span class="pb-2.5 text-neutral-500">Settings</span>
       </nav>
+
+      <!-- NEW · the activity feed speaks in judgments, not pipeline stages -->
+      <div v-if="tab === 'activity'" class="mt-5 max-w-2xl space-y-2" :class="newClass()">
+        <div
+          v-for="line in judgmentFeed"
+          :key="line"
+          class="rounded-md border border-edge px-3 py-2 text-xs text-neutral-300"
+        >
+          {{ line }}
+        </div>
+        <p class="pt-1 text-[11px] text-neutral-600">
+          this is the shipped activity feed — the voice changed from "inspecting cell D4"
+          to why it acted
+        </p>
+      </div>
 
       <!-- NEW · intake question — lives in the upload staging strip -->
       <div
@@ -248,7 +257,7 @@ export default {
 
       <!-- the shipped "agent working" strip — before morning, unchanged behavior -->
       <div
-        v-if="!morning && !overnight"
+        v-if="!morning && !overnight && tab === 'assets'"
         class="mt-5 flex items-center gap-2.5 rounded-md border border-edge px-3 py-2"
       >
         <span class="size-1.5 animate-pulse rounded-full bg-teal-300" />
@@ -262,87 +271,34 @@ export default {
         <span class="text-xs text-neutral-300">{{ overnight }}</span>
       </div>
 
-      <!-- ═══ NEW · THE DEBRIEF — replaces the working-strip after an absence ═══ -->
+      <!-- ═══ NEW · one quiet line, not a memo — everything else lives in the cards ═══ -->
       <div
-        v-if="morning"
-        class="mt-5 rounded-xl border border-edge-strong bg-panel p-4"
+        v-if="morning && tab === 'assets' && !stripDismissed"
+        class="mt-5 flex items-center gap-2.5 rounded-md border border-edge px-3 py-2"
         :class="newClass()"
       >
-        <p class="text-[10px] uppercase tracking-widest text-neutral-500">
-          While you were away · overnight
-        </p>
-
-        <ul class="mt-2.5 space-y-1.5 text-xs text-neutral-300">
-          <li class="flex gap-2">
-            <span class="text-teal-300">✓</span>
-            3 files arrived via Drive — reviewed all of them, 2 came back clean
-          </li>
-          <li class="flex gap-2">
-            <span class="text-teal-300">✓</span>
-            Drafted a fix for the hero's contrast defect — it is waiting in the tree as a branch,
-            nothing overwritten
-          </li>
-          <li class="flex gap-2">
-            <span class="text-teal-300">✓</span>
-            Reminded Maya about the stalled 4x5 (day 2) — escalation would be next, your call
-          </li>
-        </ul>
-
-        <p class="mt-3.5 text-[10px] uppercase tracking-widest text-neutral-500">
-          Only you can decide these
-        </p>
-        <div class="mt-2 space-y-2">
-          <div
-            v-for="decision in decisions"
-            :key="decision.id"
-            class="rounded-lg border border-edge bg-panel-2 p-3"
-            :class="debriefDone[decision.id] ? 'opacity-55' : ''"
-          >
-            <p class="text-xs leading-relaxed text-neutral-100">{{ decision.text }}</p>
-            <p class="mt-1 text-[10px] text-neutral-500">because: {{ decision.cite }}</p>
-            <div v-if="decision.id === 'teal' && tealAnswered" class="mt-2 text-[11px] text-teal-200/90">
-              ✓ {{ tealAnswered }}
-            </div>
-            <div v-else-if="debriefDone[decision.id]" class="mt-2 text-[11px] text-teal-200/90">✓ Done</div>
-            <div v-else class="mt-2 flex gap-1.5">
-              <button
-                type="button"
-                class="rounded-md bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-900"
-                @click="decision.go ? (view = 'slot') : answerTeal(true)"
-              >
-                {{ decision.label }}
-              </button>
-              <button
-                v-if="decision.secondary"
-                type="button"
-                class="rounded-md border border-neutral-600 px-2.5 py-1 text-[11px] text-neutral-300"
-                @click="answerTeal(false)"
-              >
-                {{ decision.secondary }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- NEW · working out loud — the activity feed's upgraded voice -->
+        <span class="text-xs text-neutral-500">☾</span>
+        <span class="text-xs text-neutral-400">
+          Overnight: reviewed 3 new files ·
+          <button class="text-teal-300 hover:underline" @click="view = 'slot'">drafted a fix for Hero</button>
+          · nudged Maya ·
+          <button class="text-neutral-300 hover:underline" @click="tealOpen = true">one question</button>
+        </span>
         <button
           type="button"
-          class="mt-3 text-[11px] text-neutral-500 hover:text-neutral-300"
-          @click="feedOpen = !feedOpen"
+          class="ml-auto text-xs text-neutral-600 hover:text-neutral-300"
+          @click="stripDismissed = true"
         >
-          {{ feedOpen ? 'Hide my reasoning' : 'How I decided what to do myself — 4 judgment calls' }}
+          ✕
         </button>
-        <ul v-if="feedOpen" class="mt-2 space-y-1 border-l border-edge pl-3 text-[11px] text-neutral-400">
-          <li v-for="line in judgmentFeed" :key="line">{{ line }}</li>
-        </ul>
       </div>
 
-      <!-- the shipped slot grid, states moved along by the night -->
-      <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <!-- the shipped slot grid — the agent's work shows up ON the cards, in place -->
+      <div v-if="tab === 'assets'" class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div
           v-for="slot in slots"
           :key="slot.id"
-          class="group overflow-hidden rounded-lg border border-edge bg-panel transition hover:border-edge-strong"
+          class="group relative overflow-hidden rounded-lg border border-edge bg-panel transition hover:border-edge-strong"
           :class="slot.id === 'hero' && morning ? 'cursor-pointer' : ''"
           @click="slot.id === 'hero' && morning ? (view = 'slot') : null"
         >
@@ -361,6 +317,66 @@ export default {
               />
               {{ slot.pill.label }}
             </span>
+          </div>
+
+          <!-- NEW · marks of the agent's overnight work, discovered in place -->
+          <div
+            v-if="morning && slot.id === 'hero' && !picked"
+            class="border-t border-edge px-3 py-1.5"
+            :class="newClass()"
+          >
+            <span class="rounded-full border border-dashed border-teal-400/50 px-1.5 py-0.5 text-[10px] text-teal-300">
+              draft ready — my pick is in
+            </span>
+          </div>
+          <div
+            v-if="morning && slot.id === 'story' && !tealAnswered"
+            class="border-t border-edge px-3 py-1.5"
+            :class="newClass()"
+          >
+            <button
+              type="button"
+              class="rounded-full border border-neutral-600 px-1.5 py-0.5 text-[10px] text-neutral-300 hover:bg-edge"
+              @click.stop="tealOpen = !tealOpen"
+            >
+              1 question for you
+            </button>
+            <!-- asked in place, answerable in place, ignorable forever -->
+            <div v-if="tealOpen" class="mt-2 rounded-md bg-panel-2 p-2.5" @click.stop>
+              <p class="text-[11px] leading-relaxed text-neutral-200">
+                Is this teal in brand? ΔE 2.2 from your confirmed teal — inside tolerance,
+                but it's on a CTA and I've been wrong about teal twice.
+              </p>
+              <div class="mt-1.5 flex gap-1.5">
+                <button
+                  type="button"
+                  class="rounded bg-neutral-50 px-2 py-0.5 text-[10px] font-medium text-neutral-900"
+                  @click="answerTeal(true); tealOpen = false"
+                >
+                  In brand
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-neutral-600 px-2 py-0.5 text-[10px] text-neutral-300"
+                  @click="answerTeal(false); tealOpen = false"
+                >
+                  Flag it
+                </button>
+                <button
+                  type="button"
+                  class="ml-auto text-[10px] text-neutral-600"
+                  @click="tealOpen = false"
+                >
+                  later
+                </button>
+              </div>
+            </div>
+          </div>
+          <div
+            v-if="morning && slot.id === 'story' && tealAnswered"
+            class="border-t border-edge px-3 py-1.5 text-[10px] text-teal-200/80"
+          >
+            ✓ {{ tealAnswered }}
           </div>
         </div>
       </div>
@@ -527,7 +543,7 @@ export default {
         >
           ☾ Next morning
         </button>
-        <span v-else class="text-[11px] text-neutral-500">day 2 · debrief on the project page</span>
+        <span v-else class="text-[11px] text-neutral-500">day 2 · the work moved — look at the cards</span>
         <label class="flex cursor-pointer items-center gap-1.5 text-[11px] text-neutral-400">
           <input v-model="showNew" type="checkbox" class="accent-amber-400" />
           highlight what's new
