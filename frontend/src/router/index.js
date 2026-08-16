@@ -36,6 +36,13 @@ const routes = [
     }),
   },
   {
+    // PROTOTYPE — throwaway, delete with PrototypeSlotFlowPage.vue.
+    path: '/prototype/slot-flow',
+    name: 'prototype-slot-flow',
+    component: () => import('@/pages/PrototypeSlotFlowPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: { name: 'dashboard' },
   },
