@@ -170,6 +170,7 @@ export default {
       'openThread',
       'comment',
       'transition',
+      'answerQuestion',
       'proposeMemoryRule',
       'approveImage',
       'submitFix',
@@ -290,6 +291,14 @@ export default {
       try {
         await this.transition(this.projectId, this.selectedId, to, rationale)
         this.notice = ''
+      } catch (error) {
+        this.notice = error.message
+      }
+    },
+    async onAnswer({ confirmed }) {
+      try {
+        const result = await this.answerQuestion(this.projectId, this.selectedId, confirmed)
+        this.notice = result.adjustment || (confirmed ? 'Kept as a real defect.' : 'Dismissed.')
       } catch (error) {
         this.notice = error.message
       }
@@ -700,6 +709,7 @@ export default {
                       @comment="onComment"
                       @transition="onTransition"
                       @propose-memory="onProposeMemory"
+                      @answer="onAnswer"
                     />
                   </div>
                 </template>

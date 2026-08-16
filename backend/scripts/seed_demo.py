@@ -108,7 +108,9 @@ DEMO_DEFECTS = [
         "confirmed palette: ΔE2000 13.4 from the nearest brand colour #1c1e2a (ink), "
         "which allows 4.0.",
         "rule_ref": "BRAND-PALETTE",
-        "status": DefectState.OPEN,
+        # A question, not a flag (decision 19 glossary): the review screen shows
+        # the two swatches and answering "not a problem" widens the tolerance.
+        "status": DefectState.NEEDS_HUMAN_REVIEW,
         "verified": True,
         "iterations": 1,
     },

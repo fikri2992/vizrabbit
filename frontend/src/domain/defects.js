@@ -31,6 +31,24 @@ export function filterDefects(defects, { categories = [], severities = [], statu
   )
 }
 
+/** A needs-human defect is a question the agent is asking, not a flag. */
+export function isQuestion(defect) {
+  return defect.status === 'needs_human_review'
+}
+
+/**
+ * Read the code-stamped measurement back out of a brand defect's comment.
+ * Mirrors backend `domain/brand.py parse_measurement` — same format, same trust
+ * argument: attach_measurement writes it by code, so parsing it is safe.
+ */
+export function parseMeasurement(comment) {
+  const match = /Measured (#[0-9a-f]{6}) against the confirmed palette: ΔE2000 (\d+(?:\.\d+)?) from the nearest brand colour (#[0-9a-f]{6})/.exec(
+    comment || '',
+  )
+  if (!match) return null
+  return { hex: match[1], deltaE: Number(match[2]), nearestHex: match[3] }
+}
+
 export function isActionable(defect) {
   return OPEN_STATES.includes(defect.status)
 }

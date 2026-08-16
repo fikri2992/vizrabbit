@@ -10,6 +10,8 @@ opinion of whether the measured thing was *designed* (domain-model.md decision
 17). That is the part a model is actually good at.
 """
 
+import re
+
 from pydantic import BaseModel, Field
 
 from app.domain.color import nearest, normalise_hex
@@ -123,6 +125,36 @@ def attach_measurement(
     if f"{worst.delta_e:.1f}" not in comment:
         stamped = f"{comment.rstrip()} {worst.describe()}".strip()
     return stamped, rule_ref or PALETTE_RULE
+
+
+#: The inverse of ``PaletteOffence.describe`` — kept adjacent so a wording change
+#: breaks the round-trip test instead of silently orphaning stored comments.
+_MEASUREMENT = re.compile(
+    r"Measured (#[0-9a-f]{6}) against the confirmed palette: "
+    r"ΔE2000 (\d+(?:\.\d+)?) from the nearest brand colour (#[0-9a-f]{6})"
+)
+
+
+class Measurement(BaseModel):
+    """What a stored brand-defect comment says was measured."""
+
+    hex: str
+    nearest_hex: str
+    delta_e: float
+
+
+def parse_measurement(comment: str) -> Measurement | None:
+    """Read the stamped measurement back out of a defect comment.
+
+    Safe to parse because ``attach_measurement`` writes it by code, never by the
+    model — the same reason the number is trustworthy is the reason it is parsable.
+    """
+    match = _MEASUREMENT.search(comment)
+    if match is None:
+        return None
+    return Measurement(
+        hex=match.group(1), nearest_hex=match.group(3), delta_e=float(match.group(2))
+    )
 
 
 def summarise(offences: list[PaletteOffence], limit: int = 12) -> str:

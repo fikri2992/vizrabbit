@@ -10,6 +10,8 @@ import {
   severityRank,
   sortDefects,
   summarize,
+ isQuestion,
+ parseMeasurement,
 } from './defects'
 
 const defect = (overrides = {}) => ({
@@ -149,5 +151,28 @@ describe('isClear', () => {
 
   it('is not clear while anything awaits a human', () => {
     expect(isClear([defect({ status: 'needs_human_review' })])).toBe(false)
+  })
+})
+
+describe('questions', () => {
+  it('a needs-human defect is a question, everything else is not', () => {
+    expect(isQuestion({ status: 'needs_human_review' })).toBe(true)
+    expect(isQuestion({ status: 'open' })).toBe(false)
+  })
+
+  it('parses the code-stamped measurement, mirroring the backend format', () => {
+    const comment =
+      'CTA teal looks off. Measured #3aad88 against the confirmed palette: ' +
+      'ΔE2000 5.19 from the nearest brand colour #2aa47d (accent teal), which allows 3.0.'
+    expect(parseMeasurement(comment)).toEqual({
+      hex: '#3aad88',
+      deltaE: 5.19,
+      nearestHex: '#2aa47d',
+    })
+  })
+
+  it('refuses prose that merely mentions a delta-E', () => {
+    expect(parseMeasurement('the model thinks ΔE is big')).toBeNull()
+    expect(parseMeasurement('')).toBeNull()
   })
 })

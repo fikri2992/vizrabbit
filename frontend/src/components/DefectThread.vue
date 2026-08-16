@@ -1,4 +1,5 @@
 <script>
+import { isQuestion, parseMeasurement } from '@/domain/defects'
 import { ago } from '@/domain/time'
 
 const TRANSITION_LABELS = {
@@ -17,7 +18,7 @@ export default {
     thread: { type: Object, required: true },
     canPropose: { type: Boolean, default: false },
   },
-  emits: ['comment', 'transition', 'propose-memory'],
+  emits: ['comment', 'transition', 'propose-memory', 'answer'],
   data() {
     return { body: '', rationale: '', overriding: false, memorizing: false, proposal: '' }
   },
@@ -30,6 +31,14 @@ export default {
         value,
         label: TRANSITION_LABELS[value] || value,
       }))
+    },
+    /** A question, not a flag (decision 19 glossary): asked, answerable, ignorable. */
+    question() {
+      return isQuestion(this.defect)
+    },
+    /** The stamped ΔE measurement, when this is a colour question. */
+    measurement() {
+      return this.question ? parseMeasurement(this.defect.comment) : null
     },
   },
   methods: {
@@ -65,7 +74,53 @@ export default {
 
 <template>
   <div class="mt-2 border-t border-neutral-800 pt-2.5">
-    <p v-if="!defect.circle_verified" class="mb-2 text-xs text-amber-400">
+    <!-- A question thread: the agent asking, not flagging. Ignorable forever. -->
+    <div v-if="question" class="mb-2 rounded-lg border border-violet-400/40 bg-violet-400/5 p-2.5">
+      <p class="text-[10px] uppercase tracking-wide text-violet-300">
+        The agent isn't sure — your eyes
+      </p>
+      <div v-if="measurement" class="mt-2 flex items-center gap-2.5">
+        <span class="flex flex-col items-center gap-0.5">
+          <span
+            class="h-9 w-14 rounded ring-1 ring-inset ring-white/15"
+            :style="{ background: measurement.nearestHex }"
+          />
+          <span class="text-[9px] text-neutral-500">brand · {{ measurement.nearestHex }}</span>
+        </span>
+        <span class="flex flex-col items-center gap-0.5">
+          <span
+            class="h-9 w-14 rounded ring-1 ring-inset ring-white/15"
+            :style="{ background: measurement.hex }"
+          />
+          <span class="text-[9px] text-neutral-500">this · {{ measurement.hex }}</span>
+        </span>
+        <span class="text-[10px] leading-snug text-neutral-400">
+          ΔE {{ measurement.deltaE }} apart — judge with your own eyes first
+        </span>
+      </div>
+      <div class="mt-2 flex items-center gap-1.5">
+        <button
+          type="button"
+          class="rounded-md bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-900"
+          @click="$emit('answer', { confirmed: true })"
+        >
+          It's real — keep it
+        </button>
+        <button
+          type="button"
+          class="rounded-md border border-neutral-600 px-2.5 py-1 text-[11px] text-neutral-300 hover:bg-neutral-800"
+          title="Dismisses the question and teaches the rule — owner only"
+          @click="$emit('answer', { confirmed: false })"
+        >
+          Not a problem
+        </button>
+        <span class="ml-auto text-[10px] text-neutral-600">
+          or just leave it — an unanswered question never blocks
+        </span>
+      </div>
+    </div>
+
+    <p v-if="!defect.circle_verified && !question" class="mb-2 text-xs text-amber-400">
       The agent could not confirm this marker after
       {{ defect.circle_iterations }} attempts — check the placement.
     </p>

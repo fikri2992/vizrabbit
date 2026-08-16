@@ -4,8 +4,10 @@ Every state change goes through the permission layer, so the Brand Owner's
 accountability is enforced in one place rather than at each route.
 """
 
+import math
 from uuid import uuid4
 
+from app.domain import brand as brand_domain
 from app.domain.entities import (
     Comment,
     DefectRecord,
@@ -24,6 +26,7 @@ from app.domain.permissions import Permission, require, require_defect_move
 from app.domain.taxonomy import Severity
 from app.infra import repository as repo
 from app.infra.store import Store
+from app.services import brand as brand_service
 
 
 def new_id() -> str:
@@ -92,6 +95,46 @@ async def transition_defect(
     return defect
 
 
+async def answer_question(
+    store: Store,
+    project: Project,
+    defect: DefectRecord,
+    user: User,
+    confirmed: bool,
+) -> tuple[DefectRecord, str]:
+    """Answer a needs-human-review question (decision 19 glossary).
+
+    "It's real" turns the question into an ordinary open defect. "Not a problem"
+    dismisses it — and for a palette question, widens that brand colour's
+    tolerance to cover what was measured, so the same colour is never asked about
+    again (either answer teaches). Returns the defect and a note describing any
+    rule adjustment, for the caller to surface.
+    """
+    if defect.status is not DefectState.NEEDS_HUMAN_REVIEW:
+        raise ValueError("only a needs-human-review defect is a question")
+
+    if confirmed:
+        return await transition_defect(store, project, defect, user, DefectState.OPEN), ""
+
+    updated = await transition_defect(store, project, defect, user, DefectState.DISMISSED)
+
+    adjustment = ""
+    if defect.rule_ref == brand_domain.PALETTE_RULE:
+        measurement = brand_domain.parse_measurement(defect.comment)
+        profile = await brand_service.load_active(store, project.id)
+        entry = profile.entry_for(measurement.nearest_hex) if profile and measurement else None
+        if entry is not None and measurement.delta_e > entry.tolerance:
+            # Round up so the measured colour itself now sits inside tolerance.
+            entry.tolerance = math.ceil(measurement.delta_e * 10) / 10
+            profile.updated_at = now()
+            await repo.save(store, profile)
+            adjustment = (
+                f"tolerance for {entry.hex} widened to ΔE {entry.tolerance:.1f} — "
+                "this colour won't be asked about again"
+            )
+    return updated, adjustment
+
+
 async def override_severity(
     store: Store, project: Project, defect: DefectRecord, user: User, severity: Severity
 ) -> DefectRecord:
@@ -119,10 +162,13 @@ async def approve_image(
     if image.status is not ImageStatus.DONE:
         raise ValueError("the agent has not finished reviewing this image yet")
 
+    # OPEN blocks; a needs-human-review *question* does not (decision 19 glossary:
+    # an unanswered question never blocks). Approving with a question pending is
+    # the owner answering it with their feet.
     outstanding = [
         defect
         for defect in await repo.defects_for_image(store, image.id)
-        if defect.status in {DefectState.OPEN, DefectState.NEEDS_HUMAN_REVIEW}
+        if defect.status is DefectState.OPEN
     ]
     if outstanding:
         raise ValueError(

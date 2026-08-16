@@ -26,9 +26,14 @@ const STAGE_TEXT = {
   image_finished: (d) => `${d.filename}: ${d.defects} defect(s), ${d.dismissed} dismissed`,
   image_failed: (d) => `${d.filename} failed — ${d.error}`,
   run_finished: (d) => `Run ${d.status}`,
+  // The judgment voice (decision 20): why the agent stayed quiet or asked.
+  judgment: (d) => d.note,
+  draft_created: (d) => `${d.filename}: ${d.note}`,
 }
 
 const STAGE_TONE = {
+  judgment: 'text-teal-200/90',
+  draft_created: 'text-teal-200/90',
   image_failed: 'text-red-400',
   recheck_failed: 'text-red-400',
   run_finished: 'text-green-400',

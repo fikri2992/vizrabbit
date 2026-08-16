@@ -34,6 +34,9 @@ PERMITTED: set[tuple[S, S, A]] = {
     # Discarding a draft withdraws its fix and puts the defects back.
     (S.FIX_SUBMITTED, S.OPEN, A.OWNER),
     (S.FIX_SUBMITTED, S.OPEN, A.REVIEWER),
+    # Answering a question "it's real" makes it an ordinary open defect.
+    (S.NEEDS_HUMAN_REVIEW, S.OPEN, A.OWNER),
+    (S.NEEDS_HUMAN_REVIEW, S.OPEN, A.REVIEWER),
     (S.FIX_SUBMITTED, S.AGENT_RECHECKING, A.AGENT),
     (S.AGENT_RECHECKING, S.VERIFIED_RESOLVED, A.AGENT),
     (S.AGENT_RECHECKING, S.OPEN, A.AGENT),

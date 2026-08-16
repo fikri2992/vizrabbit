@@ -355,6 +355,12 @@ async def _process_one(
 
         asset.status = ImageStatus.DONE
         await repo.save(store, asset)
+
+        # Working out loud (decision 20): the judgment calls, not the pipeline
+        # stages — why the agent stayed quiet, and what it queued as a question.
+        for note in judgment_notes(report):
+            await publish("judgment", {"note": note})
+
         await publish(
             "image_finished",
             {"defects": len(report.defects), "dismissed": len(report.dismissals)},
@@ -364,6 +370,25 @@ async def _process_one(
         await repo.save(store, asset)
         await publish("image_failed", {"error": str(exc)})
         raise
+
+
+def judgment_notes(report: ImageReport, cap: int = 3) -> list[str]:
+    """The feed's judgment voice: what was considered and let go, what became a
+    question. Capped — narration, not a log dump. Pure, so the wording is testable."""
+    notes = [
+        f"considered '{d.hypothesis}' at {', '.join(d.cells)} — not a defect: {d.reason}"
+        for d in report.dismissals[:cap]
+    ]
+    left = len(report.dismissals) - cap
+    if left > 0:
+        notes.append(f"…and let {left} more suspicion(s) go the same way")
+    for defect in report.defects:
+        if defect.needs_human_review:
+            notes.append(
+                f"not confident about pin {defect.pin} ({', '.join(defect.cells)}) — "
+                "queued it as a question instead of flagging it"
+            )
+    return notes
 
 
 async def _persist_report(

@@ -109,6 +109,32 @@ async def move_defect(
         raise _translate(exc) from exc
 
 
+class AnswerQuestion(BaseModel):
+    #: True = "it's real, keep it"; False = "not a problem" (dismiss + teach).
+    confirmed: bool
+
+
+class QuestionAnswered(BaseModel):
+    defect: DefectRecord
+    #: Human-readable note of any rule/tolerance change the answer caused.
+    adjustment: str = ""
+
+
+@router.post("/defects/{defect_id}/answer")
+async def answer_question(
+    defect_id: str, body: AnswerQuestion, project: ProjectDep, store: StoreDep, user: UserDep
+) -> QuestionAnswered:
+    """Answer a needs-human question. Either answer teaches (decision 19 glossary)."""
+    defect = await _defect(store, project, defect_id)
+    try:
+        updated, adjustment = await service.answer_question(
+            store, project, defect, user, body.confirmed
+        )
+    except (PermissionError_, ValueError) as exc:
+        raise _translate(exc) from exc
+    return QuestionAnswered(defect=updated, adjustment=adjustment)
+
+
 @router.post("/defects/{defect_id}/severity")
 async def change_severity(
     defect_id: str, body: ChangeSeverity, project: ProjectDep, store: StoreDep, user: UserDep

@@ -53,6 +53,11 @@ TRANSITIONS: dict[tuple[DefectState, DefectState], frozenset[Actor]] = {
     ),
     # Withdrawing a submitted fix — discarding an agent draft puts its defects back.
     (DefectState.FIX_SUBMITTED, DefectState.OPEN): frozenset({Actor.OWNER, Actor.REVIEWER}),
+    # Answering a question as "yes, it's real" (decision 19 glossary: question
+    # thread): the agent's suspicion is confirmed and becomes an ordinary defect.
+    (DefectState.NEEDS_HUMAN_REVIEW, DefectState.OPEN): frozenset(
+        {Actor.OWNER, Actor.REVIEWER}
+    ),
     # The agent picks the fix up and re-checks it.
     (DefectState.FIX_SUBMITTED, DefectState.AGENT_RECHECKING): frozenset({Actor.AGENT}),
     # Re-check outcome: closed, or bounced back as still-present.

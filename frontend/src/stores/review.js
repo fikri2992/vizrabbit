@@ -214,6 +214,15 @@ export const useReviewStore = defineStore('review', {
       return api.get(`/api/projects/${projectId}/images/${imageId}/versions`)
     },
 
+    /** Answer a needs-human question. Either answer teaches (decision 19). */
+    async answerQuestion(projectId, defectId, confirmed) {
+      const result = await api.post(`/api/projects/${projectId}/defects/${defectId}/answer`, {
+        confirmed,
+      })
+      this.applyDefect(result.defect)
+      return result
+    },
+
     async approveImage(projectId, imageId) {
       const updated = await api.post(`/api/projects/${projectId}/images/${imageId}/approve`)
       if (this.activeImage?.image.id === imageId) this.activeImage.image = updated
