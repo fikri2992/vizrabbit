@@ -664,3 +664,45 @@ def test_omitted_placement_stays_empty(client, project):
         files=[("files", ("a.png", png_bytes(), "image/png"))],
     )
     assert response.json()["placement"] == ""
+
+
+# --- Phase 8: approved export -----------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_the_zip_holds_exactly_the_winners_latest_approved_originals(
+    client, store, blobs, project
+):
+    """Gate 8: winners only, clean originals, no superseded versions, unique names."""
+    import io as io_
+    import zipfile
+
+    # Slot A: two variants; variant 2 gets a v2 fix which is approved.
+    await upload(store, blobs, project, ["a.png", "b.png"], group_into="new")
+    group = (await slot_service.project_slots(store, project))[0]
+    original = group.variants[1].tip
+    version, _ = await recheck_service.submit_fix(
+        store, blobs, await stored_project(store, project), original, User(**OWNER),
+        "b-v2.png", png_bytes(color=(10, 200, 10)),
+    )
+    await finish(store, version.id)
+    group = (await slot_service.project_slots(store, project))[0]
+    await slot_service.apply_approval(store, group, version, OWNER["id"])
+
+    # Slot B: incomplete — must not appear.
+    await upload(store, blobs, project, ["c.png"])
+
+    as_user(client, OWNER)
+    response = client.get(f"/api/projects/{project}/export/approved")
+    assert response.status_code == 200
+    archive = zipfile.ZipFile(io_.BytesIO(response.content))
+    assert len(archive.namelist()) == 1
+    (name,) = archive.namelist()
+    assert name.endswith("-v2.png")
+    # The bytes are the approved version's clean original — not v1, not annotated.
+    assert archive.read(name) == await blobs.read(version.original_path)
+
+
+def test_export_with_nothing_approved_is_a_404_not_an_empty_zip(client, project):
+    as_user(client, OWNER)
+    assert client.get(f"/api/projects/{project}/export/approved").status_code == 404

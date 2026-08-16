@@ -68,6 +68,10 @@ export default {
       const last = this.recentActivity[0]
       return last ? `${last.stage.replaceAll('_', ' ')}${last.detail ? ` — ${last.detail}` : ''}` : ''
     },
+    /** Complete slots — what the approved-export zip would contain. */
+    approvedCount() {
+      return this.slots.filter((slot) => slot.state === 'complete').length
+    },
     /** The quiet line's content: every slot's marks, each with its slot name. */
     allMarks() {
       return this.slots.flatMap((slot) =>
@@ -247,9 +251,18 @@ export default {
         {{ needsAttention }} slot{{ needsAttention > 1 ? 's' : '' }} need{{ needsAttention > 1 ? '' : 's' }} review
       </span>
 
+      <a
+        v-if="approvedCount && tab === 'assets'"
+        :href="`/api/projects/${projectId}/export/approved`"
+        class="ml-auto rounded-md border border-teal-400/50 px-3 py-1.5 text-sm text-teal-200 hover:bg-teal-400/10"
+        download
+      >
+        Download approved ({{ approvedCount }})
+      </a>
       <label
         v-if="canUpload && tab === 'assets' && slots.length"
-        class="ml-auto cursor-pointer rounded-md bg-neutral-50 px-3 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white"
+        class="cursor-pointer rounded-md bg-neutral-50 px-3 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white"
+        :class="approvedCount ? '' : 'ml-auto'"
       >
         <input
           type="file"

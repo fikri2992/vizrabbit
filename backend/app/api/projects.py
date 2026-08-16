@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app.agents.schemas import GuidelineGrilling, GuidelineQuestion
@@ -12,6 +12,7 @@ from app.domain.permissions import Permission, permissions_for, validate_members
 from app.imaging import documents
 from app.infra import repository as repo
 from app.services import brand as brand_service
+from app.services import export as export_service
 from app.services import guidelines as guideline_service
 from app.services import projects as project_service
 
@@ -82,6 +83,23 @@ async def rename_project(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return _view(renamed, user.id)
+
+
+@router.get("/{project_id}/export/approved")
+async def export_approved(project: ProjectDep, store: StoreDep, blobs: BlobsDep) -> Response:
+    """Phase 8: the winners as a zip — clean originals, latest approved versions."""
+    if not await export_service.approved_assets(store, project.id):
+        raise HTTPException(404, "nothing approved yet")
+    payload = await export_service.build_zip(store, blobs, project.id)
+    return Response(
+        content=payload,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{project.name or "approved"}-approved.zip"'
+            )
+        },
+    )
 
 
 @router.get("/{project_id}/delete_preview")
