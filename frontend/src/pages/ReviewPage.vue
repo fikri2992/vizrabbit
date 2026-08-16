@@ -754,6 +754,21 @@ export default {
             @shape="onShape"
           />
 
+          <!-- While the frame decodes: a calm placeholder in the incoming
+               image's exact shape, so nothing jumps when the pixels land. -->
+          <div v-else class="flex h-full w-full items-center justify-center">
+            <div
+              class="shimmer relative max-h-full max-w-full overflow-hidden rounded-lg ring-1 ring-inset ring-white/5"
+              :style="{
+                aspectRatio: activeImage.image.width && activeImage.image.height
+                  ? activeImage.image.width / activeImage.image.height
+                  : 3 / 2,
+                width: '100%',
+                maxWidth: `min(100%, calc(76vh * ${activeImage.image.width && activeImage.image.height ? activeImage.image.width / activeImage.image.height : 1.5}))`,
+              }"
+            />
+          </div>
+
           <!-- Drawing toolbar -->
           <div
             v-if="can('comment')"
@@ -1133,3 +1148,35 @@ export default {
 
   <p v-else class="p-10 text-sm text-neutral-500">Loading…</p>
 </template>
+
+<style scoped>
+/* A slow sheen over a barely-lighter panel: says "coming" without demanding
+   attention, and holds the incoming image's exact footprint. */
+.shimmer {
+  background:
+    linear-gradient(
+      105deg,
+      transparent 40%,
+      rgba(255, 255, 255, 0.045) 50%,
+      transparent 60%
+    ),
+    rgba(255, 255, 255, 0.03);
+  background-size: 220% 100%, auto;
+  animation: shimmer-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer-slide {
+  from {
+    background-position: 120% 0, 0 0;
+  }
+  to {
+    background-position: -120% 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+  }
+}
+</style>
