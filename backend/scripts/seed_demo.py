@@ -32,6 +32,7 @@ from app.domain.entities import (
     Role,
     Run,
     RunStatus,
+    now,
 )
 from app.domain.grid import Grid
 from app.domain.lifecycle import DefectState
@@ -96,6 +97,20 @@ DEMO_DEFECTS = [
         "status": DefectState.NEEDS_HUMAN_REVIEW,
         "verified": False,
         "iterations": 3,
+    },
+    {
+        "cells": ["F5"],
+        "category": Category.BRAND,
+        "severity": Severity.WARNING,
+        # The ΔE quoted here is the real measurement of the strapline block
+        # mock_asset draws (#3c3732) against the seeded ink (#1c1e2a).
+        "comment": "The strapline panel is not a brand colour. Measured #3c3732 against the "
+        "confirmed palette: ΔE2000 13.4 from the nearest brand colour #1c1e2a (ink), "
+        "which allows 4.0.",
+        "rule_ref": "BRAND-PALETTE",
+        "status": DefectState.OPEN,
+        "verified": True,
+        "iterations": 1,
     },
     {
         "cells": ["B7"],
@@ -257,11 +272,46 @@ async def seed() -> None:
         ),
     )
 
+    await seed_brand_profile(store)
     variants = await seed_variant_slot(store, blobs)
 
     print(f"seeded project {PROJECT_ID}: 1 legacy image, {len(DEMO_DEFECTS)} defects")
     print(f"plus 1 slot with {variants} competing variants (one approved, one with a v2 fix)")
     print("sign in as owner@acme.com (owner) or dee@acme.com (reviewer)")
+
+
+#: The palette the demo brand actually uses, matching mock_asset's colours.
+DEMO_PALETTE = [
+    ("#eee4d6", "paper", 4.0),
+    ("#1c1e2a", "ink", 4.0),
+    ("#fcfaf6", "product", 4.0),
+    ("#ce3e4e", "primary", 3.0),
+]
+
+
+async def seed_brand_profile(store) -> None:
+    """A confirmed palette, so the demo shows brand defects rather than the empty state.
+
+    Confirmed by the owner on purpose: an unconfirmed profile raises nothing, which
+    is correct behaviour but a poor demo of it.
+    """
+    from app.domain.entities import BrandProfile, PaletteEntry
+    from app.services.brand import profile_id
+
+    await repo.save(
+        store,
+        BrandProfile(
+            id=profile_id(PROJECT_ID),
+            project_id=PROJECT_ID,
+            entries=[
+                PaletteEntry(hex=hex_value, role=role, tolerance=tolerance)
+                for hex_value, role, tolerance in DEMO_PALETTE
+            ],
+            source="Acme brand guideline.pdf",
+            confirmed_by=OWNER_ID,
+            confirmed_at=now(),
+        ),
+    )
 
 
 async def seed_variant_slot(store, blobs) -> int:

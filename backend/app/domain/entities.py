@@ -83,6 +83,51 @@ class MemoryRule(BaseModel):
     created_at: datetime = Field(default_factory=now)
 
 
+class PaletteEntry(BaseModel):
+    """One approved brand colour and how far a rendering may drift from it.
+
+    Tolerance is per entry rather than global because brands do not police every
+    colour equally: a logo red is exact, a background wash is not.
+    """
+
+    hex: str
+    role: str = ""
+    #: Maximum ΔE2000 from this hex before the colour counts as off-palette.
+    tolerance: float = 3.0
+
+
+class BrandProfile(BaseModel):
+    """A project's confirmed palette. Never fires until the Owner confirms it.
+
+    Extraction proposes; the Owner disposes. ``entries`` is what the pipeline
+    measures against and is only ever written by a confirmation, while
+    ``proposed`` holds whatever the griller read out of a guideline and is inert
+    (domain-model.md decision 16).
+    """
+
+    id: str
+    project_id: str
+    entries: list[PaletteEntry] = Field(default_factory=list)
+    proposed: list[PaletteEntry] = Field(default_factory=list)
+    #: Where the proposal came from, for the confirmation form's provenance line.
+    source: str = ""
+    confirmed_by: str = ""
+    confirmed_at: datetime | None = None
+    updated_at: datetime = Field(default_factory=now)
+
+    @property
+    def is_active(self) -> bool:
+        """Unconfirmed or empty means the brand checker stays silent."""
+        return bool(self.confirmed_by and self.entries)
+
+    @property
+    def palette(self) -> list[str]:
+        return [entry.hex for entry in self.entries]
+
+    def entry_for(self, hex_value: str) -> PaletteEntry | None:
+        return next((entry for entry in self.entries if entry.hex == hex_value), None)
+
+
 class Project(BaseModel):
     id: str
     name: str

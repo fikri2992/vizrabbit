@@ -29,6 +29,10 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 | **Re-check** | Uploading a fixed image version; agent verifies each open defect is resolved. Core: it is the only path to `verified_resolved`. |
 | **Review thread** | A human-anchored annotation: drawn shapes (circle/rect/arrow/freehand) + a comment, pinned to the image. Shares one pin sequence with defects. Frame.io model: every comment is anchored. |
 | **Ask agent** | A review thread flagged for inspection: the drawn region maps to grid cells, the Inspector runs on that crop with the human's question as hypothesis, and replies in the thread. A confirmed finding becomes a real defect carrying the thread's pin. |
+| **Brand profile** | A project's confirmed palette: approved hexes, each with a role and its own ΔE2000 tolerance. Proposed by extraction, inert until the Owner confirms it. |
+| **Palette measurement** | Mechanical, per grid cell: dominant colours quantised out of the region and compared to the profile by ΔE2000. Arithmetic the Owner can re-derive — never a model's opinion of a colour. |
+| **Off-palette region** | A measurement further from its nearest brand colour than that colour's tolerance. Evidence, not a defect: only the Inspector deciding it is a *designed* element makes it one. |
+| **Designed vs scene content** | The judgement the palette checker turns on. A logo, type, packaging or graphic panel is governed by the palette; skin, sky, food, foliage, fabric and reflections are not. |
 | **Brand Owner** | The one accountable member per project. Answers grilling, gates memory promotion, controls approval/overrides, owns false positives. |
 | **Delete image** | Owner-only. Removes an upload's whole version lineage — assets, defects, threads, comments, dismissals, blobs. The one place records die with their image; "dismissals are never deleted" holds while the image exists. |
 
@@ -60,6 +64,7 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 - `guidelines` { rawText, clarifications[{question, answer}], updatedAt }
 - `runs` { projectId, images[] }
 - `slots` { projectId, name } — a creative intent; variants live on the images that point at it
+- `brand_profiles` { projectId, entries[{hex, role, tolerance}], proposed[], confirmedBy } — one per project, id derived from it; `entries` is only ever written by a confirmation
 - `images` { runId, slotId, variant, gcsPaths{original, gridded, annotated}, version, status } — `slotId: ""` marks pre-slot legacy data, wrapped into a synthetic one-variant slot on read
 - `defects` { imageId, category, severity, cells[], circle{x,y,r}, confidence, status, ruleRef }
 - `comments` { defectId, author (user|agent), body, mentions[] }
@@ -84,6 +89,9 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 13. Slot → variants → linear version chain. Grouping is *offered* at upload (default: one slot per file), never a blocking question. Approval is per-variant and completes the slot.
 14. Archived is derived from "a sibling is approved", not a stored flag. A slot holds at most one approved variant, so approving another simply moves the approval — reversibility, and no migration, fall out of the derivation.
 15. Upload is the only review trigger. Every variant in a batch is reviewed on arrival; a fix re-checks only its own version; archiving and un-archiving never start or cancel a review, because an archived variant's verdicts stay true.
+16. Brand palettes are proposed by extraction and only ever enforced by Owner confirmation. An unconfirmed profile raises nothing — not "everything passes", not "everything fails". Silence is the honest answer when nobody has said what the brand colours are.
+17. The palette checker is split so each half does what it is good at: ΔE2000 measures (pure arithmetic, cited in the defect comment so the Owner can re-derive it), and the Inspector judges only whether the measured thing is a designed element or scene content. A brand defect therefore never rests on a model's opinion of a colour.
+18. Guideline PDFs are rendered to page images, not just text-extracted, with a hard page budget. The colours worth catching are the ones printed as a swatch with no hex beside them, and those are invisible to a text reader.
 
 ## Open items
 

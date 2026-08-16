@@ -11,6 +11,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from app.domain.entities import (
+    BrandProfile,
     Comment,
     DefectRecord,
     DismissalRecord,
@@ -33,6 +34,7 @@ COLLECTIONS: dict[type[BaseModel], str] = {
     Project: "projects",
     Guideline: "guidelines",
     MemoryRule: "memory_rules",
+    BrandProfile: "brand_profiles",
     Run: "runs",
     Slot: "slots",
     ImageAsset: "images",

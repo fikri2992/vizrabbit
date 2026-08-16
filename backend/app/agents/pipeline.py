@@ -29,6 +29,15 @@ from app.agents.schemas import (
     validate_against_grid,
 )
 from app.config import settings
+from app.domain.brand import (
+    PALETTE_RULE,
+    PaletteOffence,
+    attach_measurement,
+    evaluate,
+    offences_for_cells,
+    summarise,
+)
+from app.domain.entities import BrandProfile
 from app.domain.grid import Grid
 from app.domain.taxonomy import Category, Severity
 from app.imaging.annotate import Annotation, draw_annotations
@@ -36,6 +45,7 @@ from app.imaging.canvas import fit_for_model, to_png_bytes
 from app.imaging.contact_sheet import contact_sheet, inspection_sheet
 from app.imaging.crops import zoom_cells
 from app.imaging.grid_overlay import apply_grid
+from app.imaging.palette import measure_cells
 
 ProgressHook = Callable[[str, dict], Awaitable[None]] | None
 
@@ -78,6 +88,9 @@ class ImageReport:
     scan_notes: str = ""
     pro_gate_ran: bool = False
     pro_gate_reason: str = ""
+    #: Every off-palette measurement, defect or not — the evidence trail behind
+    #: a brand finding, and behind the decision not to raise one.
+    palette_offences: list[PaletteOffence] = field(default_factory=list)
 
     @property
     def blockers(self) -> int:
@@ -168,15 +181,39 @@ def pro_gate_agent(guidelines: str) -> LlmAgent:
 # --- stages ---------------------------------------------------------------
 
 
-async def scan(image: Image.Image, grid: Grid, guidelines: str) -> ScanResult:
-    """Stage 1 — whole image plus labelled grid, high recall."""
+def measure_palette(
+    image: Image.Image, grid: Grid, profile: BrandProfile | None
+) -> list[PaletteOffence]:
+    """Per-cell colour measurement against a confirmed profile. No model, no cost.
+
+    Returns nothing at all when no profile is confirmed, which is what keeps an
+    unconfirmed extraction from quietly becoming a source of defects.
+    """
+    if profile is None or not profile.is_active:
+        return []
+    return evaluate(measure_cells(image, grid), profile)
+
+
+async def scan(
+    image: Image.Image,
+    grid: Grid,
+    guidelines: str,
+    offences: list[PaletteOffence] | None = None,
+) -> ScanResult:
+    """Stage 1 — whole image plus labelled grid, high recall.
+
+    Palette measurements ride in the *prompt*, not the instruction: they describe
+    this image, and guidelines are never compiled or rewritten per image.
+    """
     gridded = apply_grid(image, grid)
+    measurements = summarise(offences or [])
     result = await run_agent(
         scanner_agent(guidelines),
         prompt=(
             "Image 1 is the original. Image 2 is the same image with the labelled grid. "
             f"The grid is {grid.cols} columns (A-{chr(ord('A') + grid.cols - 1)}) by "
             f"{grid.rows} rows (1-{grid.rows}). Flag every region that might contain a defect."
+            + (f"\n\n{measurements}" if measurements else "")
         ),
         images=[
             bytes_part(to_png_bytes(fit_for_model(image))),
@@ -195,11 +232,37 @@ async def scan(image: Image.Image, grid: Grid, guidelines: str) -> ScanResult:
     return result
 
 
-async def inspect(image: Image.Image, grid: Grid, suspect: Suspect, guidelines: str) -> Verdict:
-    """Stage 2 — zoom into one suspect and decide. This is the precision gate."""
+async def inspect(
+    image: Image.Image,
+    grid: Grid,
+    suspect: Suspect,
+    guidelines: str,
+    offences: list[PaletteOffence] | None = None,
+) -> Verdict:
+    """Stage 2 — zoom into one suspect and decide. This is the precision gate.
+
+    For a colour finding the Inspector is not asked whether the measurement is
+    right — it is arithmetic — but whether the thing measured is a designed
+    element the palette governs, or scene content it does not.
+    """
     zoomed = zoom_cells(image, grid, suspect.cells)
     locator = grid.zoom_bounds(suspect.cells, margin_cells=settings.zoom_margin_cells)
     sheet = inspection_sheet(image, zoomed, suspect.cells, locator=locator)
+
+    here = offences_for_cells(offences or [], suspect.cells)
+    colour_note = ""
+    if here:
+        readings = "\n".join(f"- {offence.describe()}" for offence in here)
+        colour_note = (
+            "\n\nMeasured colour in this region (mechanical, already verified):\n"
+            f"{readings}\n"
+            "The measurement is not in question. Decide only whether this colour belongs "
+            "to a designed element the brand palette governs — logo, type, packaging, "
+            "graphic panel, UI chrome — or to photographic scene content it does not, "
+            "such as skin, hair, food, sky, foliage, fabric texture or a reflection. "
+            f"If it is a designed element, confirm it as a {Category.BRAND.value} defect "
+            f"citing {PALETTE_RULE}. If it is scene content, dismiss it."
+        )
 
     return await run_agent(
         inspector_agent(guidelines),
@@ -207,7 +270,7 @@ async def inspect(image: Image.Image, grid: Grid, suspect: Suspect, guidelines: 
             f"Suspected {suspect.category.value} defect in cells {', '.join(suspect.cells)}.\n"
             f"The Scanner's hypothesis: {suspect.hypothesis}\n"
             f"Possible rule violated: {suspect.rule_ref or 'none given'}\n\n"
-            "Confirm or dismiss it."
+            "Confirm or dismiss it." + colour_note
         ),
         images=[bytes_part(to_png_bytes(fit_for_model(sheet)))],
         schema=Verdict,
@@ -330,6 +393,7 @@ async def process_image(
     budget: ProBudget | None = None,
     on_progress: ProgressHook = None,
     grid: Grid | None = None,
+    profile: BrandProfile | None = None,
 ) -> ImageReport:
     """Run one image through every stage."""
     grid = grid or Grid.for_image(image.width, image.height)
@@ -340,8 +404,15 @@ async def process_image(
         if on_progress:
             await on_progress(stage, detail)
 
+    # Measure before any model runs: it is cheap, deterministic, and an
+    # unconfirmed profile makes it a no-op rather than a source of noise.
+    offences = measure_palette(image, grid, profile)
+    report.palette_offences = offences
+    if offences:
+        await emit("palette_measured", off_palette_regions=len(offences))
+
     await emit("scan_started", grid=f"{grid.cols}x{grid.rows}")
-    scan_result = await scan(image, grid, guidelines)
+    scan_result = await scan(image, grid, guidelines, offences)
     report.scan_notes = scan_result.notes
     await emit("scan_finished", suspects=len(scan_result.suspects))
 
@@ -350,7 +421,10 @@ async def process_image(
 
     # Inspect every suspect concurrently — they are independent judgements.
     verdicts = await asyncio.gather(
-        *(inspect(image, grid, suspect, guidelines) for suspect in scan_result.suspects),
+        *(
+            inspect(image, grid, suspect, guidelines, offences)
+            for suspect in scan_result.suspects
+        ),
         return_exceptions=True,
     )
 
@@ -376,6 +450,15 @@ async def process_image(
         cells = validate_against_grid(verdict.cells, grid) or suspect.cells
         severity = verdict.severity or Severity.WARNING
         comment = verdict.comment or verdict.reason
+        category = verdict.category or suspect.category
+        rule_ref = suspect.rule_ref
+
+        comment, rule_ref = attach_measurement(
+            comment,
+            rule_ref,
+            category is Category.BRAND,
+            offences_for_cells(offences, cells),
+        )
 
         await emit("annotating", pin=pin, cells=cells)
         annotation, iterations, verified = await place_circle(
@@ -387,10 +470,10 @@ async def process_image(
             Defect(
                 pin=pin,
                 cells=cells,
-                category=verdict.category or suspect.category,
+                category=category,
                 severity=severity,
                 comment=comment,
-                rule_ref=suspect.rule_ref,
+                rule_ref=rule_ref,
                 annotation=annotation,
                 circle_iterations=iterations,
                 circle_verified=verified,

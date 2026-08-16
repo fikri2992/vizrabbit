@@ -2,6 +2,7 @@
 import { mapActions, mapState } from 'pinia'
 
 import ActivityFeed from '@/components/ActivityFeed.vue'
+import BrandPanel from '@/components/BrandPanel.vue'
 import GuidelinePanel from '@/components/GuidelinePanel.vue'
 import MemoryPanel from '@/components/MemoryPanel.vue'
 import SlotCard from '@/components/SlotCard.vue'
@@ -16,6 +17,7 @@ export default {
   name: 'ProjectPage',
   components: {
     ActivityFeed,
+    BrandPanel,
     GuidelinePanel,
     MemoryPanel,
     SlotCard,
@@ -50,6 +52,9 @@ export default {
     },
     canApproveMemory() {
       return useProjectsStore().can('approve_memory_rule')
+    },
+    canConfirmBrand() {
+      return useProjectsStore().can('confirm_brand_profile')
     },
     lastActivityLine() {
       const last = this.recentActivity[0]
@@ -295,6 +300,12 @@ export default {
     <div v-else class="mt-5 grid max-w-4xl gap-6 md:grid-cols-2">
       <TeamPanel :project-id="projectId" />
       <MemoryPanel :project-id="projectId" :can-approve="canApproveMemory" />
+      <BrandPanel
+        :project-id="projectId"
+        :can-confirm="canConfirmBrand"
+        :can-extract="canEditGuideline"
+        class="md:col-span-2"
+      />
       <GuidelinePanel :project-id="projectId" :can-edit="canEditGuideline" class="md:col-span-2" />
     </div>
 

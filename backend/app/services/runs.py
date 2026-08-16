@@ -13,6 +13,7 @@ from PIL import Image
 from app.agents import prompts
 from app.agents.pipeline import ImageReport, process_image
 from app.domain.entities import (
+    BrandProfile,
     Circle,
     Comment,
     DefectRecord,
@@ -38,6 +39,7 @@ from app.infra import repository as repo
 from app.infra.events import Event, EventBus
 from app.infra.storage import ANNOTATED, GRIDDED, ORIGINAL, BlobStore, blob_path
 from app.infra.store import Store
+from app.services import brand as brand_service
 from app.services import slots as slot_service
 from app.services.review import notify
 
@@ -246,11 +248,12 @@ async def execute_run(
     )
 
     guidelines = await assemble_guidelines(store, project.id)
+    profile = await brand_service.load_active(store, project.id)
     semaphore = asyncio.Semaphore(_concurrency())
 
     async def one(image_id: str) -> None:
         async with semaphore:
-            await _process_one(store, blobs, bus, project, run, image_id, guidelines)
+            await _process_one(store, blobs, bus, project, run, image_id, guidelines, profile)
 
     results = await asyncio.gather(
         *(one(image_id) for image_id in run.image_ids), return_exceptions=True
@@ -289,7 +292,8 @@ async def review_one(
     a batch upload (decision 15) — one image, same pipeline, same events.
     """
     guidelines = await assemble_guidelines(store, project.id)
-    await _process_one(store, blobs, bus, project, run, image_id, guidelines)
+    profile = await brand_service.load_active(store, project.id)
+    await _process_one(store, blobs, bus, project, run, image_id, guidelines, profile)
 
 
 def _concurrency() -> int:
@@ -306,6 +310,7 @@ async def _process_one(
     run: Run,
     image_id: str,
     guidelines: str,
+    profile: BrandProfile | None = None,
 ) -> None:
     asset = await repo.load(store, ImageAsset, image_id)
     if asset is None:
@@ -332,7 +337,9 @@ async def _process_one(
             blob_path(project.id, asset.id, GRIDDED), to_png_bytes(apply_grid(image, grid))
         )
 
-        report = await process_image(image, guidelines, on_progress=publish, grid=grid)
+        report = await process_image(
+            image, guidelines, on_progress=publish, grid=grid, profile=profile
+        )
         await _persist_report(store, blobs, project, asset, image, report)
 
         asset.status = ImageStatus.DONE

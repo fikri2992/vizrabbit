@@ -105,6 +105,27 @@ class GuidelineGrilling(BaseModel):
     questions: list[GuidelineQuestion] = Field(default_factory=list)
 
 
+class ProposedColour(BaseModel):
+    """One palette colour read out of a guideline document."""
+
+    hex: str = Field(description="Six-digit hex, e.g. #1d9e75")
+    role: str = Field(default="", description="What the brand calls it: primary, accent, ink…")
+    #: How the colour was obtained. A hex printed as text is far more reliable than
+    #: one read off a swatch, and the confirmation form says so to the Owner.
+    read_from: str = Field(
+        default="swatch", description="'text' if the hex was printed, 'swatch' if sampled visually"
+    )
+    note: str = Field(default="", description="Where in the document it appeared")
+
+
+class PaletteExtraction(BaseModel):
+    """A proposed brand palette plus whatever the document left unclear."""
+
+    colours: list[ProposedColour] = Field(default_factory=list)
+    questions: list[GuidelineQuestion] = Field(default_factory=list)
+    notes: str = Field(default="")
+
+
 def validate_against_grid(refs: list[str], grid: Grid) -> list[str]:
     """Drop refs the model invented that fall outside this image's grid.
 

@@ -224,6 +224,48 @@ Tasks:
   carries the measured ΔE; an unconfirmed profile produces zero brand defects
   (asserted by test)
 
+**Built 2026-08-16.** Two deviations from the task list, both deliberate:
+
+- The maths lives in `domain/color.py` (pure: sRGB→Lab, CIEDE2000) and only the
+  Pillow work in `imaging/palette.py`, rather than both in `imaging/`. AGENTS.md
+  makes `domain/` the home for exhaustively-tested pure logic, and ΔE against
+  published reference pairs is exactly that.
+- ΔE2000, not CIE76. It has a canonical verification dataset, and it disagrees
+  with plain Lab distance by a factor of two precisely in near-neutrals and
+  saturated blues — the colours brands care most about.
+
+The split that makes a brand defect defensible: measurement is arithmetic the
+Owner can re-derive and is stamped into the comment by code, never retyped by
+the model (`attach_measurement`); the Inspector is asked only whether the
+measured thing is a designed element or scene content.
+
+**Gate 7 evidence (2026-08-16) — partially verified.**
+
+Passing and checked:
+- ΔE2000 against all 33 Sharma/Wu/Dalal verification pairs at **±0.0001**
+  (gate asked ±0.1). One expected value I first wrote from memory was wrong;
+  hand-deriving it confirmed the implementation and corrected the test.
+- Unconfirmed profile → zero measurements, asserted at unit, service and API
+  level, plus withdraw-keeps-the-colours. 861 backend tests green, 50 frontend.
+- Measurement layer recall **1.00 (10/10)** on planted off-palette designed
+  elements (`check_palette_eval --mechanical`). The same run flags 10/10
+  photographic blobs, which is correct and is the load the Inspector must carry
+  — locked in by a test so the division of labour cannot drift silently.
+- Browser-verified on the seeded demo: palette panel confirms, withdraws and
+  re-confirms; a `BRAND-PALETTE` defect renders carrying a real measurement
+  ("ΔE2000 13.4 from #1c1e2a (ink), which allows 4.0").
+
+**Not yet verified — needs model credentials, which this machine lacks:**
+- Full-pipeline recall and false-positive numbers. The gate's ≤ 1 FP across 10
+  clean images means the Inspector must reject ~10/10 photographic blobs; the
+  mechanical run shows it gets no help from the measurement in doing so. **This
+  is the real risk in Phase 7 and it is untested.** Run
+  `uv run python -m scripts.check_palette_eval` before the demo.
+- `scripts/check_brand_extraction.py` is written but has never been run: it
+  needs both credentials and a real brand PDF, which the repo does not carry.
+  The swatch-rendering half is covered by `tests/test_documents.py` against a
+  generated PDF whose colour exists only as a graphic.
+
 ## Phase 8 — Approved export (Aug 22) — closes the dead end
 
 Tasks:

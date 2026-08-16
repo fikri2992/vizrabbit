@@ -33,6 +33,9 @@ class Permission(StrEnum):
     EDIT_GUIDELINE = "edit_guideline"
     #: Removes the whole version lineage and its records — an accountability decision.
     DELETE_IMAGE = "delete_image"
+    #: Turns an extracted palette into one the pipeline enforces. Owner-only because
+    #: confirming it is what makes brand defects the Owner's to answer for.
+    CONFIRM_BRAND_PROFILE = "confirm_brand_profile"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
