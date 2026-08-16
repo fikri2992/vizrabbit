@@ -2,47 +2,111 @@
 /**
  * PROTOTYPE — throwaway. Not wired to the API, not tested.
  *
- * Question: does the partner experience make sense when you grow into it from
- * an empty project — instead of being dropped into week-6 state?
+ * Question: where do the partner behaviors sit in the UI we already shipped?
+ * This mocks the real ProjectPage and SlotFlowPage layouts and inserts the new
+ * pieces in their actual homes:
  *
- * One linear story. Every concept (verdict, rule, spec, agenda) is born on
- * screen before anything relies on it. Mocked data; anything that would upload
- * or generate runs behind staged delays.
+ *   - debrief panel  → where ProjectPage's "agent working" strip lives
+ *   - judgment lines → the activity feed's voice, upgraded
+ *   - drafted fixes  → branches on the real tree canvas, marked as agent's
+ *   - the stance     → the SlotFlowPage rail, above the approve button
+ *   - intake question→ the upload staging strip
+ *
+ * "Next morning" jumps time — initiative is only visible in your absence.
+ * Toggle "highlight new" to see exactly what is being added to the shipped UI.
  */
 
 const WAIT = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function daySlots(morning) {
+  return [
+    {
+      id: 'hero',
+      name: 'Hero banner',
+      tone: '#8a5a3b',
+      variants: 2,
+      pill: morning
+        ? { label: 'Ready — pick 1 of 2', dot: '#9FE1CB' }
+        : { label: '2 open', dot: '#FAC775' },
+    },
+    {
+      id: 'pdp',
+      name: 'Product detail set',
+      tone: '#3b5a8a',
+      variants: 1,
+      pill: morning ? { label: 'Reviewing…', dot: '#a3a3a8', pulse: true } : { label: 'Clean', dot: '#9FE1CB' },
+    },
+    {
+      id: 'story',
+      name: 'Story teaser',
+      tone: '#3b7a5a',
+      variants: 1,
+      pill: morning ? { label: 'Clean', dot: '#9FE1CB' } : { label: '1 open', dot: '#FAC775' },
+    },
+  ]
+}
+
+function morningTree() {
+  return [
+    { id: 'a', parent: null, col: 0, row: 0, v: 'v1', who: 'Maya', tone: '#8a5a3b', state: '2 open', dot: '#FAC775' },
+    { id: 'b', parent: 'a', col: 0, row: 1, v: 'v2', who: 'QA agent', tone: '#9a6a45', state: 'Clean', dot: '#9FE1CB', draft: true },
+    { id: 'c', parent: null, col: 1, row: 0, v: 'v1', who: 'Leo', tone: '#7a4a2b', state: 'Clean', dot: '#9FE1CB' },
+  ]
+}
 
 export default {
   name: 'PrototypePartnerPage',
   data() {
     return {
-      stage: 0, // index into stages below
-      busy: '', // current fake-latency line, '' when idle
+      view: 'project', // project | slot
+      morning: false, // has time passed yet
+      overnight: '', // fake-latency line while the night "runs"
+      showNew: true,
+      staged: false, // upload staging strip open
+      placement: '',
+      tree: [],
+      selected: null,
+      picked: false,
+      tealAnswered: '',
+      debriefDone: {},
       toasts: [],
       toastSeq: 0,
-
-      // things that get born as the story advances
-      findings: [], // stage 1
-      rules: [], // stage 2+
-      spec: [], // stage 3+
-      agenda: [], // stage 4+
-      resolvedAgenda: {},
-      week6Tab: 'today',
-      shareApproved: false,
+      feedOpen: false,
     }
   },
   computed: {
-    stages() {
+    slots() {
+      return daySlots(this.morning)
+    },
+    byId() {
+      return Object.fromEntries(this.tree.map((node) => [node.id, node]))
+    },
+    /** What only the human can decide — the debrief's second half. */
+    decisions() {
       return [
-        'A new project',
-        'The first verdict',
-        'Your first rule',
-        'It starts noticing',
-        'Six weeks later',
+        {
+          id: 'pick',
+          text: 'Pick the hero. My call: the fix I drafted (v2) — it clears both defects and the headline now reads 4.8:1.',
+          cite: 'the other clean option crops into the product',
+          go: 'slot',
+          label: 'See it in the tree',
+        },
+        {
+          id: 'teal',
+          text: 'Is this teal (#2aa47d) within brand? I have been wrong about teal twice, so I am asking instead of flagging.',
+          cite: 'ΔE 2.2 from your confirmed teal — inside tolerance, but on a CTA',
+          label: 'Yes, in brand',
+          secondary: 'No, flag it',
+        },
       ]
     },
-    openFindings() {
-      return this.findings.filter((finding) => !finding.done)
+    judgmentFeed() {
+      return [
+        'kept quiet about a drop shadow on pdp_03 — rule #1 says shadows are fine',
+        'drafted a fix for the hero contrast instead of just flagging it — it is reversible, so I acted first',
+        'did NOT draft a fix for the crop complaint — that is a creative call, Maya should make it',
+        'reminded Maya about the stalled 4x5 — day 2, next step would be escalating to you',
+      ]
     },
   },
   methods: {
@@ -53,152 +117,74 @@ export default {
         this.toasts = this.toasts.filter((entry) => entry.id !== id)
       }, 4600)
     },
-    async run(lines) {
-      for (const line of lines) {
-        this.busy = line
-        await WAIT(1100)
-      }
-      this.busy = ''
+
+    /** Time passes. Initiative needs an absence to be visible in. */
+    async nextMorning() {
+      this.overnight = 'Night passes — 3 files arrive in the Drive folder…'
+      await WAIT(1500)
+      this.overnight = 'Reviewing them · drafting fixes for the mechanical defects…'
+      await WAIT(1800)
+      this.overnight = ''
+      this.morning = true
+      this.tree = morningTree()
+      this.selected = 'b'
+      this.toast('Good morning. The debrief is at the top — start there.')
     },
 
-    // --- stage 0 → 1: the first upload ------------------------------------
-
-    async firstUpload() {
-      await this.run(['Uploading hero_draft.png…', 'Looking at it…', 'Checking against your brand PDF…'])
-      this.findings = [
-        {
-          id: 'contrast',
-          title: 'The headline is hard to read',
-          detail: 'Text vs background measures 2.1:1 — your brand PDF (p.4) asks for at least 3:1.',
-          source: 'from your brand PDF',
-          done: false,
-        },
-        {
-          id: 'shadow',
-          title: 'The product has a drop shadow',
-          detail: 'Your PDF doesn’t mention shadows either way, so I’m asking rather than deciding.',
-          source: 'I’m not sure — you tell me',
-          done: false,
-        },
-      ]
-      this.stage = 1
+    answerTeal(inBrand) {
+      this.tealAnswered = inBrand
+        ? 'Confirmed in-brand — teal tolerance widened, I will stop second-guessing it.'
+        : 'Flagged. And noted: CTA colours get the strict treatment.'
+      this.debriefDone = { ...this.debriefDone, teal: true }
     },
 
-    // --- stage 1 → 2: agreeing and disagreeing both teach ------------------
-
-    async fixFinding(finding) {
-      await this.run(['Nudging the headline up to 4.8:1…', 'Re-checking…'])
-      finding.done = 'Fixed — new version passed the re-check.'
-      this.toast('The fix became a new version. The old one is still there — nothing is overwritten.')
-      this.maybeAdvanceToRule()
+    makePick() {
+      this.picked = true
+      this.debriefDone = { ...this.debriefDone, pick: true }
+      this.toast('Recorded: approved by you, on my recommendation. Your reasons, not mine, go in the audit line.')
     },
-    dismissFinding(finding) {
-      finding.done = 'You said this is fine.'
-      finding.asking = true
-    },
-    rememberRule(finding) {
-      finding.asking = false
-      this.rules.push({
-        id: 1,
-        text: 'Drop shadows on product shots are fine for this brand',
-        born: 'born just now, from your dismissal',
-        cited: 0,
-      })
-      this.toast('Written down as rule #1. I won’t flag shadows again.')
-      this.maybeAdvanceToRule()
-    },
-    maybeAdvanceToRule() {
-      if (this.findings.every((finding) => finding.done && !finding.asking)) this.stage = 2
+    discardDraft() {
+      this.tree = this.tree.filter((node) => !node.draft)
+      this.selected = 'c'
+      this.toast('Draft discarded — it was only ever a branch. I will propose instead of draft for this slot from now on.')
     },
 
-    // --- stage 2 → 3: the second upload uses what it learned ---------------
-
-    async secondUpload() {
-      await this.run(['Uploading hero_v2_square.png…', 'Checking…', 'Applying rule #1…'])
-      this.rules = this.rules.map((rule) => ({ ...rule, cited: rule.cited + 1 }))
-      this.toast('Passed. It has a shadow — rule #1 says that’s fine, so I kept quiet about it.')
-      await WAIT(1400)
-      this.stage = 3
-    },
-    acceptSpec() {
-      this.spec = [
-        { format: '16x9', state: 'done' },
-        { format: '1x1', state: 'done' },
-        { format: '9x16', state: 'missing' },
-      ]
-      this.agenda = [
-        {
-          id: 'missing-916',
-          title: 'This banner has no vertical (9:16) version yet',
-          cite: 'you agreed the set is 16x9 + 1x1 + 9:16',
-          actionLabel: 'A designer drops one in Drive — simulate',
-        },
-      ]
-      this.toast('Noted as the definition of done for this slot. Now I can tell you what’s missing.')
-    },
-
-    // --- stage 3 → 4: the agenda earns its keep ----------------------------
-
-    async resolveAgenda(item) {
-      await this.run(['hero_9x16.png appeared in the Drive folder…', 'Reviewing it…'])
-      this.spec = this.spec.map((entry) =>
-        entry.format === '9x16' ? { ...entry, state: 'done' } : entry,
+    choosePlacement(where) {
+      this.placement = where
+      this.toast(
+        where === 'TikTok'
+          ? 'Noted — I will watch the bottom-UI safe area on every 9:16 in this batch.'
+          : `Noted — checking ${where} placement rules for this batch.`,
       )
-      this.resolvedAgenda = { ...this.resolvedAgenda, [item.id]: 'Arrived via Drive · reviewed · clean' }
-      this.toast('Nobody clicked upload — the folder you already use is the doorway.')
-      await WAIT(1600)
-      this.stage = 4
-      this.seedWeekSix()
     },
 
-    // --- stage 4: the mature state, now legible ----------------------------
-
-    seedWeekSix() {
-      this.rules = [
-        { id: 1, text: 'Drop shadows on product shots are fine', born: 'from your dismissal, day 1', cited: 14 },
-        { id: 2, text: 'Headline contrast at least 3:1', born: 'from your brand PDF, day 1', cited: 31 },
-        { id: 3, text: 'Logo stays off busy photo backgrounds', born: 'from 3 rejections in week 2', cited: 9 },
-      ]
-      this.agenda = [
-        {
-          id: 'w6-stall',
-          title: 'A fix has been stuck on Maya for 4 days',
-          cite: 'requested Tuesday · nothing uploaded since',
-          actionLabel: 'Send a reminder',
-          quick: true,
-        },
-        {
-          id: 'w6-pick',
-          title: 'Two versions are clean — pick one and this slot is done',
-          cite: 'both passed every check · only your approval is missing',
-          actionLabel: 'Open the slot',
-          quick: true,
-        },
-      ]
-      this.resolvedAgenda = {}
+    edge(node) {
+      const parent = this.byId[node.parent]
+      if (!parent) return ''
+      const x1 = parent.col * 210 + 84
+      const y1 = parent.row * 150 + 100
+      const x2 = node.col * 210 + 84
+      const y2 = node.row * 150 + 4
+      if (Math.abs(x1 - x2) < 1) return `M ${x1} ${y1} L ${x2} ${y2}`
+      const bus = y2 - 22
+      return `M ${x1} ${y1} L ${x1} ${bus} L ${x2} ${bus} L ${x2} ${y2}`
     },
-    quickResolve(item) {
-      this.resolvedAgenda = { ...this.resolvedAgenda, [item.id]: 'Done.' }
+    newClass(active = true) {
+      return this.showNew && active ? 'outline outline-2 outline-offset-2 outline-warning/60' : ''
     },
-    approveShare() {
-      this.busy = 'Recording the approval…'
-      setTimeout(() => {
-        this.busy = ''
-        this.shareApproved = true
-      }, 900)
-    },
-
     reset() {
       Object.assign(this.$data, {
-        stage: 0,
-        busy: '',
-        findings: [],
-        rules: [],
-        spec: [],
-        agenda: [],
-        resolvedAgenda: {},
-        week6Tab: 'today',
-        shareApproved: false,
+        view: 'project',
+        morning: false,
+        overnight: '',
+        staged: false,
+        placement: '',
+        tree: [],
+        selected: null,
+        picked: false,
+        tealAnswered: '',
+        debriefDone: {},
+        feedOpen: false,
       })
     },
   },
@@ -206,302 +192,315 @@ export default {
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-49px)] pb-24">
-    <div class="mx-auto max-w-xl px-6 py-10">
-      <!-- ═══ STAGE 0: empty, honestly ═══ -->
-      <template v-if="stage === 0">
-        <h2 class="text-lg font-medium text-neutral-50">Autumn Drop 04</h2>
-        <p class="mt-1 text-sm text-neutral-500">
-          A new project. There are no rules yet, no checklist, no agenda — because you
-          haven't shown me anything.
-        </p>
-        <div class="mt-6 rounded-xl border-2 border-dashed border-edge-strong p-10 text-center">
-          <p class="text-sm text-neutral-300">Drop your first image here</p>
-          <p class="mt-1 text-xs text-neutral-600">
-            I'll check it against your brand PDF, and ask when I'm not sure.
-          </p>
-          <button
-            type="button"
-            class="mt-4 rounded-md bg-neutral-50 px-4 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
-            :disabled="!!busy"
-            @click="firstUpload"
-          >
-            Upload hero_draft.png
-          </button>
-        </div>
-        <p class="mt-3 text-center text-[11px] text-neutral-600">
-          brand PDF already imported · Drive folder /Autumn Drop connected
-        </p>
-      </template>
-
-      <!-- ═══ STAGE 1: the first verdict — sources named, one is a question ═══ -->
-      <template v-else-if="stage === 1">
-        <h2 class="text-lg font-medium text-neutral-50">I looked at hero_draft.png</h2>
-        <p class="mt-1 text-sm text-neutral-500">
-          Two things. For each one I say <em>why</em>, and where the reason comes from.
-        </p>
-        <div class="mt-5 space-y-3">
-          <div
-            v-for="finding in findings"
-            :key="finding.id"
-            class="rounded-xl border border-edge-strong bg-panel p-4"
-            :class="finding.done ? 'opacity-70' : ''"
-          >
-            <p class="text-sm text-neutral-100">{{ finding.title }}</p>
-            <p class="mt-1 text-xs leading-relaxed text-neutral-400">{{ finding.detail }}</p>
-            <p class="mt-1 text-[10px] text-neutral-600">reason: {{ finding.source }}</p>
-
-            <div v-if="finding.asking" class="mt-3 rounded-lg bg-panel-2 p-3">
-              <p class="text-xs text-neutral-200">
-                Should I remember that? — "shadows on product shots are fine for this brand"
-              </p>
-              <div class="mt-2 flex gap-1.5">
-                <button
-                  type="button"
-                  class="rounded-md bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-900"
-                  @click="rememberRule(finding)"
-                >
-                  Yes, remember it
-                </button>
-                <button
-                  type="button"
-                  class="rounded-md border border-neutral-600 px-2.5 py-1 text-[11px] text-neutral-300"
-                  @click="finding.asking = false; maybeAdvanceToRule()"
-                >
-                  Just this once
-                </button>
-              </div>
-            </div>
-            <div v-else-if="finding.done" class="mt-2 text-[11px] text-teal-200/90">
-              ✓ {{ finding.done }}
-            </div>
-            <div v-else class="mt-3 flex gap-1.5">
-              <button
-                type="button"
-                class="rounded-md bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-900 disabled:opacity-50"
-                :disabled="!!busy"
-                @click="fixFinding(finding)"
-              >
-                Fix it for me
-              </button>
-              <button
-                type="button"
-                class="rounded-md border border-neutral-600 px-2.5 py-1 text-[11px] text-neutral-300"
-                @click="dismissFinding(finding)"
-              >
-                That's not a problem
-              </button>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <!-- ═══ STAGE 2: the rulebook exists now, with one entry you created ═══ -->
-      <template v-else-if="stage === 2">
-        <h2 class="text-lg font-medium text-neutral-50">You just taught me something</h2>
-        <p class="mt-1 text-sm text-neutral-500">
-          Your dismissal became a rule. This is the whole rulebook so far — it only ever
-          grows from moments like that one, or from your brand PDF.
-        </p>
-        <div class="mt-5 space-y-2">
-          <div
-            v-for="rule in rules"
-            :key="rule.id"
-            class="rounded-xl border border-edge-strong bg-panel p-3.5"
-          >
-            <div class="flex items-baseline gap-2">
-              <span class="font-mono text-[11px] text-neutral-500">#{{ rule.id }}</span>
-              <span class="text-sm text-neutral-100">{{ rule.text }}</span>
-            </div>
-            <p class="mt-1 text-[10px] text-neutral-600">{{ rule.born }}</p>
-          </div>
-        </div>
+  <div class="min-h-[calc(100vh-49px)] pb-20">
+    <!-- ═══════════════ PROJECT PAGE (mock of the shipped one) ═══════════════ -->
+    <div v-if="view === 'project'" class="mx-auto max-w-6xl px-6 py-6">
+      <span class="text-xs text-neutral-500">← All projects</span>
+      <header class="mt-1 flex flex-wrap items-center gap-3">
+        <h2 class="text-xl font-medium tracking-tight">Autumn Drop 04</h2>
+        <span class="rounded-full border border-edge-strong px-2 py-0.5 text-[11px] text-neutral-400">owner</span>
         <button
           type="button"
-          class="mt-6 w-full rounded-md bg-neutral-50 py-2 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
-          :disabled="!!busy"
-          @click="secondUpload"
+          class="ml-auto rounded-md bg-neutral-50 px-3 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white"
+          @click="staged = true"
         >
-          Upload the next image and see the rule at work
+          Add images
         </button>
-      </template>
+      </header>
 
-      <!-- ═══ STAGE 3: spec proposed from behavior, agenda born from spec ═══ -->
-      <template v-else-if="stage === 3">
-        <h2 class="text-lg font-medium text-neutral-50">It passed — and I noticed a pattern</h2>
-        <p class="mt-1 text-sm text-neutral-500">
-          You've now made a wide and a square version of this banner. Campaigns like this
-          usually ship a vertical too.
-        </p>
+      <nav class="mt-4 flex gap-5 border-b border-edge text-sm">
+        <span class="-mb-px border-b-2 border-neutral-100 pb-2.5 font-medium text-neutral-100">Slots 3</span>
+        <span class="pb-2.5 text-neutral-500">Activity</span>
+        <span class="pb-2.5 text-neutral-500">Settings</span>
+      </nav>
 
-        <div v-if="!spec.length" class="mt-5 rounded-xl border border-edge-strong bg-panel p-4">
-          <p class="text-sm text-neutral-100">
-            Should "16x9 + 1x1 + 9:16" be the definition of done for this banner?
+      <!-- NEW · intake question — lives in the upload staging strip -->
+      <div
+        v-if="staged"
+        class="mt-5 rounded-lg border border-edge-strong bg-panel p-3"
+        :class="newClass()"
+      >
+        <div class="flex items-center gap-2">
+          <span v-for="n in 3" :key="n" class="h-10 w-10 rounded bg-edge" />
+          <span class="text-xs text-neutral-400">3 files staged</span>
+          <button type="button" class="ml-auto text-xs text-neutral-500" @click="staged = false">✕</button>
+        </div>
+        <div class="mt-2.5 border-t border-edge pt-2.5">
+          <p class="text-xs text-neutral-200">
+            <span class="text-teal-300">One question before I look:</span> where will these run?
+            It changes what I watch for.
           </p>
-          <p class="mt-1 text-xs text-neutral-500">
-            If yes, I can tell you what's missing — instead of waiting for you to remember.
-          </p>
-          <div class="mt-3 flex gap-1.5">
+          <div class="mt-2 flex gap-1.5">
             <button
+              v-for="where in ['TikTok', 'Instagram', 'Web']"
+              :key="where"
               type="button"
-              class="rounded-md bg-neutral-50 px-3 py-1 text-[11px] font-medium text-neutral-900"
-              @click="acceptSpec"
+              class="rounded-md px-2.5 py-1 text-[11px]"
+              :class="placement === where ? 'bg-neutral-50 font-medium text-neutral-900' : 'border border-neutral-600 text-neutral-300 hover:bg-edge'"
+              @click="choosePlacement(where)"
             >
-              Yes, that's the set
+              {{ where }}
             </button>
-            <button
-              type="button"
-              class="rounded-md border border-neutral-600 px-3 py-1 text-[11px] text-neutral-300"
-            >
-              No, just these two
-            </button>
+            <span class="self-center text-[10px] text-neutral-600">TikTok → bottom-UI safe area on every 9:16</span>
           </div>
         </div>
+      </div>
 
-        <template v-else>
-          <div class="mt-5 flex gap-2">
-            <span
-              v-for="entry in spec"
-              :key="entry.format"
-              class="flex items-center gap-1.5 rounded-full border border-edge-strong px-2.5 py-1 text-[11px] text-neutral-300"
-            >
-              <span
-                class="size-1.5 rounded-full"
-                :style="{ background: entry.state === 'done' ? '#9FE1CB' : '#FAC775' }"
-              />
-              {{ entry.format }}
-            </span>
-          </div>
-          <div class="mt-4 space-y-2.5">
-            <div
-              v-for="item in agenda"
-              :key="item.id"
-              class="rounded-xl border border-edge-strong bg-panel p-4"
-            >
-              <p class="text-sm text-neutral-100">{{ item.title }}</p>
-              <p class="mt-1 text-[11px] text-neutral-500">because: {{ item.cite }}</p>
-              <div v-if="resolvedAgenda[item.id]" class="mt-2 text-[11px] text-teal-200/90">
-                ✓ {{ resolvedAgenda[item.id] }}
-              </div>
+      <!-- the shipped "agent working" strip — before morning, unchanged behavior -->
+      <div
+        v-if="!morning && !overnight"
+        class="mt-5 flex items-center gap-2.5 rounded-md border border-edge px-3 py-2"
+      >
+        <span class="size-1.5 animate-pulse rounded-full bg-teal-300" />
+        <span class="text-xs text-neutral-400">Agent working on 2 slots · inspecting suspect cells</span>
+        <span class="ml-auto text-xs text-neutral-500">Watch</span>
+      </div>
+
+      <!-- overnight passing -->
+      <div v-if="overnight" class="mt-5 flex items-center gap-2.5 rounded-md border border-edge px-3 py-2">
+        <span class="size-1.5 animate-pulse rounded-full bg-teal-300" />
+        <span class="text-xs text-neutral-300">{{ overnight }}</span>
+      </div>
+
+      <!-- ═══ NEW · THE DEBRIEF — replaces the working-strip after an absence ═══ -->
+      <div
+        v-if="morning"
+        class="mt-5 rounded-xl border border-edge-strong bg-panel p-4"
+        :class="newClass()"
+      >
+        <p class="text-[10px] uppercase tracking-widest text-neutral-500">
+          While you were away · overnight
+        </p>
+
+        <ul class="mt-2.5 space-y-1.5 text-xs text-neutral-300">
+          <li class="flex gap-2">
+            <span class="text-teal-300">✓</span>
+            3 files arrived via Drive — reviewed all of them, 2 came back clean
+          </li>
+          <li class="flex gap-2">
+            <span class="text-teal-300">✓</span>
+            Drafted a fix for the hero's contrast defect — it is waiting in the tree as a branch,
+            nothing overwritten
+          </li>
+          <li class="flex gap-2">
+            <span class="text-teal-300">✓</span>
+            Reminded Maya about the stalled 4x5 (day 2) — escalation would be next, your call
+          </li>
+        </ul>
+
+        <p class="mt-3.5 text-[10px] uppercase tracking-widest text-neutral-500">
+          Only you can decide these
+        </p>
+        <div class="mt-2 space-y-2">
+          <div
+            v-for="decision in decisions"
+            :key="decision.id"
+            class="rounded-lg border border-edge bg-panel-2 p-3"
+            :class="debriefDone[decision.id] ? 'opacity-55' : ''"
+          >
+            <p class="text-xs leading-relaxed text-neutral-100">{{ decision.text }}</p>
+            <p class="mt-1 text-[10px] text-neutral-500">because: {{ decision.cite }}</p>
+            <div v-if="decision.id === 'teal' && tealAnswered" class="mt-2 text-[11px] text-teal-200/90">
+              ✓ {{ tealAnswered }}
+            </div>
+            <div v-else-if="debriefDone[decision.id]" class="mt-2 text-[11px] text-teal-200/90">✓ Done</div>
+            <div v-else class="mt-2 flex gap-1.5">
               <button
-                v-else
                 type="button"
-                class="mt-2.5 rounded-md bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-900 disabled:opacity-50"
-                :disabled="!!busy"
-                @click="resolveAgenda(item)"
+                class="rounded-md bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-900"
+                @click="decision.go ? (view = 'slot') : answerTeal(true)"
               >
-                {{ item.actionLabel }}
+                {{ decision.label }}
+              </button>
+              <button
+                v-if="decision.secondary"
+                type="button"
+                class="rounded-md border border-neutral-600 px-2.5 py-1 text-[11px] text-neutral-300"
+                @click="answerTeal(false)"
+              >
+                {{ decision.secondary }}
               </button>
             </div>
           </div>
-        </template>
-      </template>
+        </div>
 
-      <!-- ═══ STAGE 4: week 6 — the screen from before, now earned ═══ -->
-      <template v-else>
-        <h2 class="text-lg font-medium text-neutral-50">Six weeks later</h2>
-        <p class="mt-1 text-sm text-neutral-500">
-          Everything below grew exactly the way you just watched: rules from your calls,
-          the checklist from your patterns, the to-do list from the gaps.
-        </p>
+        <!-- NEW · working out loud — the activity feed's upgraded voice -->
+        <button
+          type="button"
+          class="mt-3 text-[11px] text-neutral-500 hover:text-neutral-300"
+          @click="feedOpen = !feedOpen"
+        >
+          {{ feedOpen ? 'Hide my reasoning' : 'How I decided what to do myself — 4 judgment calls' }}
+        </button>
+        <ul v-if="feedOpen" class="mt-2 space-y-1 border-l border-edge pl-3 text-[11px] text-neutral-400">
+          <li v-for="line in judgmentFeed" :key="line">{{ line }}</li>
+        </ul>
+      </div>
 
-        <div class="mt-4 flex gap-1">
+      <!-- the shipped slot grid, states moved along by the night -->
+      <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          v-for="slot in slots"
+          :key="slot.id"
+          class="group overflow-hidden rounded-lg border border-edge bg-panel transition hover:border-edge-strong"
+          :class="slot.id === 'hero' && morning ? 'cursor-pointer' : ''"
+          @click="slot.id === 'hero' && morning ? (view = 'slot') : null"
+        >
+          <div class="aspect-square w-full" :style="{ background: slot.tone }" />
+          <div class="flex items-center gap-2 px-3 py-2.5">
+            <span class="min-w-0 truncate text-sm text-neutral-200">{{ slot.name }}</span>
+            <span
+              v-if="slot.variants > 1"
+              class="shrink-0 rounded-full border border-edge-strong px-1.5 text-[10px] text-neutral-500"
+            >{{ slot.variants }} variants</span>
+            <span class="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-neutral-400">
+              <span
+                class="size-1.5 rounded-full"
+                :class="slot.pill.pulse ? 'animate-pulse' : ''"
+                :style="{ background: slot.pill.dot }"
+              />
+              {{ slot.pill.label }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ SLOT FLOW (mock of the shipped canvas) ═══════════════ -->
+    <div v-else class="relative">
+      <div
+        class="pointer-events-none fixed inset-0"
+        style="
+          background-image:
+            linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+          background-size: 40px 40px;
+        "
+      />
+      <header class="relative z-20 flex h-12 items-center gap-3 border-b border-edge-strong bg-ink/90 px-4 backdrop-blur xl:pr-[356px]">
+        <button type="button" class="text-xs text-neutral-500 hover:text-neutral-200" @click="view = 'project'">
+          ← Slots
+        </button>
+        <span class="text-sm font-medium text-neutral-100">Hero banner</span>
+        <span class="text-[11px] text-neutral-400">2 variants · 3 versions</span>
+      </header>
+
+      <div class="relative xl:pr-[340px]">
+        <div class="relative mx-auto mt-10 h-[420px] w-[400px]">
+          <svg class="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+            <path
+              v-for="node in tree.filter((n) => n.parent)"
+              :key="`e-${node.id}`"
+              :d="edge(node)"
+              fill="none"
+              stroke-linecap="round"
+              :stroke="node.draft ? '#5eead4' : '#8b8b96'"
+              :stroke-width="2"
+              :stroke-dasharray="node.draft ? '5 4' : ''"
+            />
+          </svg>
+
           <button
-            v-for="tab in [
-              { id: 'today', label: 'To-do' },
-              { id: 'rules', label: 'Rulebook' },
-              { id: 'share', label: 'Client link' },
-            ]"
-            :key="tab.id"
+            v-for="node in tree"
+            :key="node.id"
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs"
-            :class="
-              week6Tab === tab.id
-                ? 'bg-neutral-50 font-medium text-neutral-900'
-                : 'text-neutral-400 hover:bg-edge'
-            "
-            @click="week6Tab = tab.id"
+            class="absolute w-[168px] rounded-xl border p-2.5 text-left shadow-xl shadow-black/50 transition"
+            :style="{ left: `${node.col * 210}px`, top: `${node.row * 150 + 4}px` }"
+            :class="[
+              picked && node.draft
+                ? 'border-teal-400/70 bg-teal-400/10'
+                : node.draft
+                  ? 'border-dashed border-teal-400/60 bg-panel-2'
+                  : 'border-edge-strong bg-panel-2 hover:border-neutral-500',
+              selected === node.id ? 'ring-2 ring-neutral-300' : '',
+              node.draft ? newClass() : '',
+            ]"
+            @click="selected = node.id"
           >
-            {{ tab.label }}
+            <div class="flex items-center gap-2.5">
+              <div class="h-9 w-12 shrink-0 rounded ring-1 ring-inset ring-white/10" :style="{ background: node.tone }" />
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono text-xs text-neutral-100">{{ node.v }}</span>
+                  <span
+                    v-if="node.draft"
+                    class="rounded-full border border-teal-400/50 px-1.5 text-[9px] text-teal-300"
+                  >{{ picked ? 'approved' : 'draft · by agent' }}</span>
+                </div>
+                <div class="truncate text-[11px] text-neutral-400">{{ node.who }}</div>
+              </div>
+            </div>
+            <div class="mt-2 flex items-center gap-1.5 text-[10px] text-neutral-300">
+              <span class="size-1.5 rounded-full" :style="{ background: node.dot }" />
+              {{ picked && node.draft ? 'Approved' : node.state }}
+            </div>
           </button>
         </div>
+      </div>
 
-        <div v-if="week6Tab === 'today'" class="mt-4 space-y-2.5">
-          <div
-            v-for="item in agenda"
-            :key="item.id"
-            class="rounded-xl border border-edge-strong bg-panel p-4"
-            :class="resolvedAgenda[item.id] ? 'opacity-60' : ''"
-          >
-            <p class="text-sm text-neutral-100">{{ item.title }}</p>
-            <p class="mt-1 text-[11px] text-neutral-500">because: {{ item.cite }}</p>
-            <div v-if="resolvedAgenda[item.id]" class="mt-2 text-[11px] text-teal-200/90">✓ Done</div>
-            <button
-              v-else
-              type="button"
-              class="mt-2.5 rounded-md bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-900"
-              @click="quickResolve(item)"
-            >
-              {{ item.actionLabel }}
-            </button>
+      <!-- the shipped rail, with the stance panel added above the actions -->
+      <aside class="fixed bottom-0 right-0 top-[49px] z-20 hidden w-[340px] flex-col border-l border-edge-strong bg-panel/95 backdrop-blur xl:flex">
+        <header class="border-b border-edge-strong px-4 py-3">
+          <div class="text-[10px] uppercase tracking-widest text-neutral-400">Selected version</div>
+          <div v-if="byId[selected]" class="mt-0.5 text-xs text-neutral-100">
+            {{ byId[selected].v }} · {{ byId[selected].who }} · {{ byId[selected].state }}
           </div>
-        </div>
+        </header>
 
-        <div v-else-if="week6Tab === 'rules'" class="mt-4 space-y-2">
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+          <!-- ═══ NEW · THE STANCE — the agent's pick, above your buttons ═══ -->
           <div
-            v-for="rule in rules"
-            :key="rule.id"
-            class="rounded-xl border border-edge-strong bg-panel p-3.5"
+            v-if="!picked && tree.some((n) => n.draft)"
+            class="rounded-lg border border-teal-400/40 bg-teal-400/5 p-3"
+            :class="newClass()"
           >
-            <div class="flex items-baseline gap-2">
-              <span class="font-mono text-[11px] text-neutral-500">#{{ rule.id }}</span>
-              <span class="min-w-0 flex-1 text-sm text-neutral-100">{{ rule.text }}</span>
-              <span class="text-[10px] text-neutral-600">used {{ rule.cited }}×</span>
+            <p class="text-[10px] uppercase tracking-wide text-teal-300">My call</p>
+            <p class="mt-1 text-xs leading-relaxed text-neutral-200">
+              I'd ship <span class="font-mono">v2</span> — the draft. It clears both defects and
+              the headline reads 4.8:1. The other clean option (Leo's v1) crops into the product.
+            </p>
+            <p class="mt-1 text-[10px] text-neutral-500">
+              a recommendation, not a decision — overriding me teaches me
+            </p>
+            <div class="mt-2.5 flex gap-1.5">
+              <button
+                type="button"
+                class="flex-1 rounded-md bg-neutral-50 px-2 py-1 text-[11px] font-medium text-neutral-900"
+                @click="makePick"
+              >
+                Make it the pick
+              </button>
+              <button
+                type="button"
+                class="flex-1 rounded-md border border-neutral-600 px-2 py-1 text-[11px] text-neutral-300"
+                @click="discardDraft"
+              >
+                Discard the draft
+              </button>
             </div>
-            <p class="mt-1 text-[10px] text-neutral-600">{{ rule.born }}</p>
           </div>
-          <p class="pt-1 text-center text-[11px] text-neutral-600">
-            you never filled in a settings form — every rule has a birthday and a reason
-          </p>
-        </div>
 
-        <div v-else class="mt-6">
-          <p class="mb-3 text-center text-[10px] uppercase tracking-widest text-neutral-600">
-            what your client sees — one link, no account
-          </p>
-          <div class="mx-auto max-w-sm rounded-2xl border border-edge-strong bg-panel p-5 shadow-2xl shadow-black/50">
-            <div class="h-44 rounded-lg" style="background: #3b5a8a" />
-            <p class="mt-3 text-sm font-medium text-neutral-100">Hero banner · final</p>
-            <p class="mt-2 rounded-lg bg-panel-2 p-2.5 text-[11px] text-neutral-300">
-              Checked: brand colours, contrast, platform crops — nothing outstanding.
+          <div v-else-if="picked" class="rounded-lg border border-teal-400/40 bg-teal-400/5 p-3 text-center">
+            <p class="text-sm text-teal-200">Slot complete ✓</p>
+            <p class="mt-1 text-[10px] text-neutral-500">
+              approved by you · drafted by the agent · both facts in the audit line
             </p>
             <button
-              v-if="!shareApproved"
               type="button"
-              class="mt-3 w-full rounded-lg bg-neutral-50 py-2 text-sm font-medium text-neutral-900 disabled:opacity-50"
-              :disabled="!!busy"
-              @click="approveShare"
+              class="mt-2 w-full rounded-md bg-neutral-50 px-2 py-1.5 text-[11px] font-medium text-neutral-900"
+              @click="view = 'project'"
             >
-              Approve for release
+              Back to the debrief
             </button>
-            <div v-else class="mt-3 rounded-lg border border-teal-400/40 bg-teal-400/5 p-3 text-center">
-              <p class="text-sm text-teal-200">Approved ✓</p>
-              <p class="mt-1 text-[10px] text-neutral-500">
-                who approved what, over which alternatives — saved forever
-              </p>
-            </div>
           </div>
         </div>
-      </template>
 
-      <!-- fake-latency line -->
-      <div
-        v-if="busy"
-        class="mt-5 flex items-center gap-2 rounded-lg border border-edge-strong bg-panel-2 px-3 py-2"
-      >
-        <span class="size-1.5 animate-pulse rounded-full bg-teal-300" />
-        <span class="text-xs text-neutral-300">{{ busy }}</span>
-      </div>
+        <div class="border-t border-edge-strong p-3">
+          <button type="button" class="w-full rounded-md border border-neutral-600 px-3 py-1.5 text-xs text-neutral-300">
+            Open review
+          </button>
+        </div>
+      </aside>
     </div>
 
     <!-- toasts -->
@@ -515,27 +514,26 @@ export default {
       </div>
     </div>
 
-    <!-- story progress -->
+    <!-- switcher -->
     <div class="fixed bottom-0 left-0 right-0 z-30 border-t border-edge-strong bg-ink/90 px-6 py-2.5 backdrop-blur">
-      <div class="flex items-center justify-center gap-3">
-        <span class="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
-          prototype
-        </span>
-        <div class="flex items-center gap-2">
-          <template v-for="(title, index) in stages" :key="title">
-            <span
-              class="text-[11px]"
-              :class="index === stage ? 'font-medium text-neutral-50' : 'text-neutral-600'"
-            >{{ title }}</span>
-            <span v-if="index < stages.length - 1" class="text-neutral-700">→</span>
-          </template>
-        </div>
+      <div class="flex flex-wrap items-center justify-center gap-3">
+        <span class="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] text-warning">prototype</span>
         <button
+          v-if="!morning"
           type="button"
-          class="ml-3 text-[11px] text-neutral-400 hover:text-neutral-100"
-          @click="reset"
+          class="rounded-md bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-900 disabled:opacity-50"
+          :disabled="!!overnight"
+          @click="nextMorning"
         >
-          Start over
+          ☾ Next morning
+        </button>
+        <span v-else class="text-[11px] text-neutral-500">day 2 · debrief on the project page</span>
+        <label class="flex cursor-pointer items-center gap-1.5 text-[11px] text-neutral-400">
+          <input v-model="showNew" type="checkbox" class="accent-amber-400" />
+          highlight what's new
+        </label>
+        <button type="button" class="ml-3 text-[11px] text-neutral-400 hover:text-neutral-100" @click="reset">
+          Reset
         </button>
       </div>
     </div>
