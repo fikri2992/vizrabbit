@@ -1,11 +1,15 @@
+import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api import auth, projects, review, runs, threads
+from app.api import auth, projects, review, runs, slots, threads
 from app.config import settings
+
+logger = logging.getLogger("app.api")
 
 app = FastAPI(title="Visual QA Agent", version="0.1.0")
 
@@ -18,9 +22,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def unhandled(request: Request, exc: Exception) -> JSONResponse:
+    """Say what actually broke instead of "Internal Server Error".
+
+    A bare 500 sends whoever is debugging to the server logs, and on Cloud Run
+    that is a different window and a minute of scrolling. Members-only routes and
+    an internal tool: the exception type and message are worth far more in the
+    browser than the small amount they give away. The traceback still goes to the
+    log, and only the one-line summary crosses the wire.
+
+    Firestore's missing-index error is the case that earns this: its message
+    carries the console URL that creates the index, and swallowing it turns a
+    30-second fix into an investigation.
+    """
+    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}".strip()[:2000]},
+    )
+
+
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(runs.router)
+app.include_router(slots.router)
 app.include_router(review.router)
 app.include_router(review.notifications_router)
 app.include_router(threads.router)

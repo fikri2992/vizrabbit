@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -13,6 +13,7 @@ from app.domain.permissions import Permission
 from app.infra import repository as repo
 from app.services import recheck as recheck_service
 from app.services import runs as run_service
+from app.services import slots as slot_service
 
 router = APIRouter(prefix="/api", tags=["runs"])
 
@@ -23,12 +24,35 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 HEARTBEAT_SECONDS = 20
 
 
+class SiblingVariant(BaseModel):
+    """A competing variant, as the review header's prev/next navigation needs it."""
+
+    variant: int
+    image_id: str
+    archived: bool = False
+    approved: bool = False
+
+
+class SlotContext(BaseModel):
+    """Where this image sits in its slot — "variant 2 of 3, v2" and its siblings."""
+
+    slot_id: str
+    variant: int
+    variant_count: int
+    version: int
+    version_count: int
+    #: The sibling that superseded this variant, if the slot is complete.
+    archived_by: int | None = None
+    siblings: list[SiblingVariant] = []
+
+
 class ImageView(BaseModel):
     image: ImageAsset
     defects: list[DefectRecord]
     original_url: str
     annotated_url: str | None = None
     gridded_url: str | None = None
+    slot: SlotContext | None = None
 
 
 @router.post("/projects/{project_id}/runs", status_code=202)
@@ -40,8 +64,14 @@ async def start_run(
     user: UserDep,
     background: BackgroundTasks,
     files: list[UploadFile],
+    group_into: str | None = Form(default=None),
 ) -> Run:
-    """Accept a batch and start processing it. Returns immediately; watch /events."""
+    """Accept a batch and start processing it. Returns immediately; watch /events.
+
+    ``group_into`` carries the staging strip's one grouping control: omitted means
+    a slot per file, ``"new"`` makes the batch one slot's competing variants, and a
+    slot id appends them as further variants of that slot.
+    """
     guard(project, user, Permission.UPLOAD_IMAGES)
     if not files:
         raise HTTPException(400, "no files uploaded")
@@ -55,7 +85,10 @@ async def start_run(
             raise HTTPException(413, f"{upload.filename} is larger than 20MB")
         uploads.append((upload.filename or "upload.png", data))
 
-    run = await run_service.create_run(store, blobs, project, user, uploads)
+    try:
+        run = await run_service.create_run(store, blobs, project, user, uploads, group_into)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     background.add_task(run_service.execute_run, store, blobs, bus, project, run)
     return run
 
@@ -118,16 +151,43 @@ async def get_image(
     image = await repo.load(store, ImageAsset, image_id)
     if image is None or image.project_id != project.id:
         raise HTTPException(404, "image not found")
-    return await _image_view(store, blobs, image)
+    return await _image_view(store, blobs, image, with_slot=True)
 
 
-async def _image_view(store, blobs, image: ImageAsset) -> ImageView:
+async def _image_view(store, blobs, image: ImageAsset, with_slot: bool = False) -> ImageView:
     return ImageView(
         image=image,
         defects=await repo.defects_for_image(store, image.id),
         original_url=blobs.public_url(image.original_path),
         annotated_url=blobs.public_url(image.annotated_path) if image.annotated_path else None,
         gridded_url=blobs.public_url(image.gridded_path) if image.gridded_path else None,
+        slot=await _slot_context(store, image) if with_slot else None,
+    )
+
+
+async def _slot_context(store, image: ImageAsset) -> SlotContext | None:
+    """Only the single-image view pays for this — the list view would do it N times."""
+    group = await slot_service.slot_containing(store, image)
+    if group is None:
+        return None
+
+    chain = group.chain(image.variant)
+    return SlotContext(
+        slot_id=group.slot_id,
+        variant=image.variant,
+        variant_count=len(group.variants),
+        version=image.version,
+        version_count=len(chain.versions) if chain else 1,
+        archived_by=group.archived_by(image.variant),
+        siblings=[
+            SiblingVariant(
+                variant=sibling.variant,
+                image_id=sibling.tip.id,
+                archived=group.archived_by(sibling.variant) is not None,
+                approved=sibling.is_approved,
+            )
+            for sibling in group.variants
+        ],
     )
 
 

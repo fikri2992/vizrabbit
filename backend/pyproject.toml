@@ -17,6 +17,9 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "httpx>=0.27.0",
     "python-multipart>=0.0.12",
+    # Renders guideline PDF pages to images so swatch colours can be read
+    # visually. Chosen over PyMuPDF (AGPL) and pdf2image (needs poppler installed).
+    "pypdfium2>=4.30.0",
 ]
 
 [dependency-groups]

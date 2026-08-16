@@ -10,6 +10,7 @@ the reviewer's more limited controls).
 """
 
 import asyncio
+import os
 import sys
 
 import uvicorn
@@ -31,6 +32,7 @@ from app.domain.entities import (
     Role,
     Run,
     RunStatus,
+    now,
 )
 from app.domain.grid import Grid
 from app.domain.lifecycle import DefectState
@@ -95,6 +97,20 @@ DEMO_DEFECTS = [
         "status": DefectState.NEEDS_HUMAN_REVIEW,
         "verified": False,
         "iterations": 3,
+    },
+    {
+        "cells": ["F5"],
+        "category": Category.BRAND,
+        "severity": Severity.WARNING,
+        # The ΔE quoted here is the real measurement of the strapline block
+        # mock_asset draws (#3c3732) against the seeded ink (#1c1e2a).
+        "comment": "The strapline panel is not a brand colour. Measured #3c3732 against the "
+        "confirmed palette: ΔE2000 13.4 from the nearest brand colour #1c1e2a (ink), "
+        "which allows 4.0.",
+        "rule_ref": "BRAND-PALETTE",
+        "status": DefectState.OPEN,
+        "verified": True,
+        "iterations": 1,
     },
     {
         "cells": ["B7"],
@@ -256,8 +272,126 @@ async def seed() -> None:
         ),
     )
 
-    print(f"seeded project {PROJECT_ID}: 1 image, {len(DEMO_DEFECTS)} defects")
+    await seed_brand_profile(store)
+    variants = await seed_variant_slot(store, blobs)
+
+    print(f"seeded project {PROJECT_ID}: 1 legacy image, {len(DEMO_DEFECTS)} defects")
+    print(f"plus 1 slot with {variants} competing variants (one approved, one with a v2 fix)")
     print("sign in as owner@acme.com (owner) or dee@acme.com (reviewer)")
+
+
+#: The palette the demo brand actually uses, matching mock_asset's colours.
+DEMO_PALETTE = [
+    ("#eee4d6", "paper", 4.0),
+    ("#1c1e2a", "ink", 4.0),
+    ("#fcfaf6", "product", 4.0),
+    ("#ce3e4e", "primary", 3.0),
+]
+
+
+async def seed_brand_profile(store) -> None:
+    """A confirmed palette, so the demo shows brand defects rather than the empty state.
+
+    Confirmed by the owner on purpose: an unconfirmed profile raises nothing, which
+    is correct behaviour but a poor demo of it.
+    """
+    from app.domain.entities import BrandProfile, PaletteEntry
+    from app.services.brand import profile_id
+
+    await repo.save(
+        store,
+        BrandProfile(
+            id=profile_id(PROJECT_ID),
+            project_id=PROJECT_ID,
+            entries=[
+                PaletteEntry(hex=hex_value, role=role, tolerance=tolerance)
+                for hex_value, role, tolerance in DEMO_PALETTE
+            ],
+            source="Acme brand guideline.pdf",
+            confirmed_by=OWNER_ID,
+            confirmed_at=now(),
+        ),
+    )
+
+
+async def seed_variant_slot(store, blobs) -> int:
+    """One slot, three competing variants — the shape the history tree draws.
+
+    Variant 1 loses on an open defect, variant 2 wins after a v2 fix, variant 3 is
+    clean but was never picked. That last one matters: it is the case where
+    "archived" must read as *superseded*, not as *rejected*.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from app.domain.entities import Slot
+
+    base = datetime.now(UTC) - timedelta(hours=6)
+    slot = Slot(id="s-hero", project_id=PROJECT_ID, name="Hero banner", created_at=base)
+    await repo.save(store, slot)
+
+    run = Run(
+        id="r-variants", project_id=PROJECT_ID, started_by=OWNER_ID, status=RunStatus.DONE
+    )
+    specs = [
+        # (id, variant, version, supersedes, uploader, minutes, approved, open defect)
+        ("v1-a", 1, 1, None, DESIGNER_ID, 0, False, True),
+        ("v2-a", 2, 1, None, DESIGNER_ID, 4, False, True),
+        ("v2-b", 2, 2, "v2-a", OWNER_ID, 95, True, False),
+        ("v3-a", 3, 1, None, OWNER_ID, 7, False, False),
+    ]
+
+    for index, spec in enumerate(specs):
+        asset_id, variant, version, parent, uploader, minutes, approved, flawed = spec
+        picture = mock_asset(900, 900)
+        grid = Grid.for_image(picture.width, picture.height)
+        asset = ImageAsset(
+            id=asset_id,
+            project_id=PROJECT_ID,
+            run_id=run.id,
+            filename=f"hero_v{variant}{'' if version == 1 else f'_fix{version}'}.png",
+            slot_id=slot.id,
+            variant=variant,
+            version=version,
+            uploaded_by=uploader,
+            supersedes_id=parent,
+            width=picture.width,
+            height=picture.height,
+            status=ImageStatus.DONE,
+            approved_by=OWNER_ID if approved else None,
+            approved_at=base + timedelta(minutes=minutes) if approved else None,
+            created_at=base + timedelta(minutes=minutes),
+        )
+        asset.original_path = await blobs.write(
+            blob_path(PROJECT_ID, asset.id, ORIGINAL), to_png_bytes(picture)
+        )
+        await repo.save(store, asset)
+        run.image_ids.append(asset.id)
+
+        if flawed:
+            cx, cy, radius = grid.circle_for(["D4"])
+            span = grid.span_bounds(["D4"])
+            await repo.save(
+                store,
+                DefectRecord(
+                    id=f"dv-{index}",
+                    project_id=PROJECT_ID,
+                    image_id=asset.id,
+                    pin=1,
+                    cells=["D4"],
+                    category=Category.ARTIFACT,
+                    severity=Severity.WARNING,
+                    comment="The strapline overlaps the product edge and loses contrast.",
+                    rule_ref="ARTF-01",
+                    circle=Circle(cx=cx, cy=cy, radius=radius),
+                    region=Region(
+                        left=span.left, top=span.top, width=span.width, height=span.height
+                    ),
+                    status=DefectState.OPEN,
+                ),
+            )
+
+    await repo.save(store, run)
+    return 3
 
 
 async def main() -> int:
@@ -268,7 +402,8 @@ async def main() -> int:
         return 1
 
     await seed()
-    config = uvicorn.Config(app, host="127.0.0.1", port=8000, log_level="info")
+    port = int(os.environ.get("PORT", "8000"))
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="info")
     await uvicorn.Server(config).serve()
     return 0
 

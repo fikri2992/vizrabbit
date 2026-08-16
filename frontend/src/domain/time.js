@@ -7,3 +7,9 @@ export function ago(value) {
   if (seconds < 7 * 86400) return `${Math.floor(seconds / 86400)}d ago`
   return new Date(value).toLocaleDateString()
 }
+
+/** "16 Aug" — the history tree wants a fixed-width fact, not a shifting "2d ago". */
+export function shortDate(value) {
+  if (!value) return ''
+  return new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+}

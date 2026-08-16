@@ -21,6 +21,7 @@ from app.domain.entities import (
 from app.domain.grid import Grid
 from app.domain.lifecycle import DefectState, assert_transition
 from app.domain.permissions import Permission, require
+from app.domain.slots import build_chains
 from app.imaging.canvas import from_bytes, to_png_bytes
 from app.imaging.grid_overlay import apply_grid
 from app.infra import repository as repo
@@ -52,13 +53,19 @@ async def submit_fix(
     """
     require(project, user.id, Permission.SUBMIT_FIX)
 
+    # A second fix of the same version is a branch, not an error (decision 13):
+    # both siblings stay live until the Owner's approval settles which one shipped.
+
     image = from_bytes(data)
     version = ImageAsset(
         id=new_id(),
         project_id=project.id,
         run_id=original.run_id,
         filename=filename or original.filename,
+        slot_id=original.slot_id,
+        variant=original.variant,
         version=original.version + 1,
+        uploaded_by=user.id,
         supersedes_id=original.id,
         width=image.width,
         height=image.height,
@@ -189,19 +196,13 @@ async def run_recheck(
 
 
 async def version_history(store: Store, image: ImageAsset) -> list[ImageAsset]:
-    """Every version of this asset, oldest first."""
+    """The whole version tree this asset belongs to, depth-first, root first.
+
+    Depth-first rather than a linear walk because chains branch now: a walk that
+    followed one successor would silently drop every sibling fix.
+    """
     everything = await repo.find(store, ImageAsset, where={"run_id": image.run_id})
-    by_id = {asset.id: asset for asset in everything}
-
-    root = image
-    while root.supersedes_id and root.supersedes_id in by_id:
-        root = by_id[root.supersedes_id]
-
-    chain = [root]
-    while True:
-        following = next(
-            (asset for asset in everything if asset.supersedes_id == chain[-1].id), None
-        )
-        if following is None:
-            return chain
-        chain.append(following)
+    for chain in build_chains(everything):
+        if any(asset.id == image.id for asset in chain.versions):
+            return chain.versions
+    return [image]

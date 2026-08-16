@@ -11,6 +11,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from app.domain.entities import (
+    BrandProfile,
     Comment,
     DefectRecord,
     DismissalRecord,
@@ -21,6 +22,7 @@ from app.domain.entities import (
     Project,
     ReviewThread,
     Run,
+    Slot,
     User,
 )
 from app.infra.store import Document, Store
@@ -32,7 +34,9 @@ COLLECTIONS: dict[type[BaseModel], str] = {
     Project: "projects",
     Guideline: "guidelines",
     MemoryRule: "memory_rules",
+    BrandProfile: "brand_profiles",
     Run: "runs",
+    Slot: "slots",
     ImageAsset: "images",
     DefectRecord: "defects",
     DismissalRecord: "dismissals",
@@ -114,6 +118,26 @@ async def projects_for_user(store: Store, user_id: str) -> list[Project]:
 
 async def images_for_run(store: Store, run_id: str) -> list[ImageAsset]:
     return await find(store, ImageAsset, where={"run_id": run_id}, order_by="created_at")
+
+
+async def images_for_project(store: Store, project_id: str) -> list[ImageAsset]:
+    return await find(store, ImageAsset, where={"project_id": project_id}, order_by="created_at")
+
+
+#: Firestore needs a composite index for equality + order_by on another field, and
+#: it will not create one on demand — the query just fails. Neither of these two
+#: callers cares about order (one asks "any left?", the other builds a name map),
+#: so they sort in Python and cost no index at all.
+
+
+async def images_for_slot(store: Store, slot_id: str) -> list[ImageAsset]:
+    found = await find(store, ImageAsset, where={"slot_id": slot_id})
+    return sorted(found, key=lambda image: image.created_at)
+
+
+async def slots_for_project(store: Store, project_id: str) -> list[Slot]:
+    found = await find(store, Slot, where={"project_id": project_id})
+    return sorted(found, key=lambda slot: slot.created_at)
 
 
 async def defects_for_image(store: Store, image_id: str) -> list[DefectRecord]:

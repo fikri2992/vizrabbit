@@ -18,11 +18,34 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // The slot flow view: the version tree behind one slot card (decision 18).
+    path: '/projects/:projectId/slots/:slotId',
+    name: 'slot-flow',
+    component: () => import('@/pages/SlotFlowPage.vue'),
+    props: true,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/projects/:projectId/images/:imageId',
     name: 'review',
     component: () => import('@/pages/ReviewPage.vue'),
     props: true,
     meta: { requiresAuth: true },
+  },
+  {
+    // Run-finished notifications link here. There is no per-run screen — the
+    // project's Activity tab is what the reader actually wants — but the link is
+    // already stored on notifications in the wild, so it has to land somewhere.
+    path: '/projects/:projectId/runs/:runId',
+    redirect: (to) => ({
+      name: 'project',
+      params: { projectId: to.params.projectId },
+      query: { tab: 'activity' },
+    }),
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: { name: 'dashboard' },
   },
 ]
 

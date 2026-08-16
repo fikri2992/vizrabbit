@@ -138,17 +138,39 @@ per-variant, the slot completes on first approval, siblings archive.
 Tasks:
 - `domain/entities.py`: `Slot` entity; `ImageAsset` gains `slot_id` and
   `variant` ordinal; archived state for losing variants
-- Upload flow asks: new slots (one per file) or variants of one slot
+- Upload flow *offers* grouping, never asks: staging strip of file chips,
+  default = each file its own slot (zero extra clicks, matches legacy); select
+  chips + "variants of one slot" to group. New variants can also be added to an
+  existing slot from its card (the competing-fix escape hatch)
 - Migration shim: legacy flat images each auto-wrap in their own slot on read —
   zero data loss, no manual migration step
 - Approval semantics: approve variant → slot complete → siblings archived
   (reversible by approving another variant); needs-review counts exclude
-  archived variants
+  archived variants. Archived carries a reason: "superseded by variant N"
+  (sibling won) vs "defects unresolved" — surfaced as tooltip, never rendered
+  as "rejected"
 - Delete: variant delete removes its version chain; slot delete removes
   everything (consequence modal counts extend accordingly)
 - History UI: 2-level tree on the slot card — variants as columns, versions as
-  a vertical chain, verdict dot per node, click-through to review
-- Review screen header shows slot context (variant 2 of 3, v2)
+  a vertical chain top-down; each node shows version + uploader + date +
+  verdict color, click-through to that version's review. Winner column ends
+  with an approval-stamp node (who approved, when). No cross-column arrows
+  ever — across = alternatives, down = time
+- Review trigger: upload is the only trigger — every variant in a batch gets
+  its own review on upload; a fix upload re-reviews just that version.
+  Archiving/un-archiving never triggers or cancels reviews (old verdicts stay
+  valid)
+- Slot card headline = best variant's state: any approved → complete; else
+  any clean-awaiting-human → "ready to pick"; else in review
+- Review screen header shows slot context (variant 2 of 3, v2) with
+  prev/next-variant navigation for comparison
+
+**Landed 2026-08-16.** Archived state turned out to be derivable rather than
+stored (domain-model.md decision 14): a variant is archived exactly while a
+sibling is approved, so reversibility and the zero-write legacy read path both
+fall out of the same derivation, and there is no migration to run. Two entity
+fields carry the whole remodel — `slot_id` and `variant` — plus `uploaded_by`,
+which the history tree needed and nothing recorded before.
 
 **Gate 6 (quantified):**
 - Every pre-existing backend test still green (no behavioural regressions)
@@ -160,6 +182,15 @@ Tasks:
   slot shows complete, siblings show archived
 - A legacy project (pre-slot data) loads with every image visible and
   reviewable, zero manual steps
+
+Gate 6 evidence (2026-08-16): 733 backend tests green (690 pre-existing
+unchanged, +43 new), 50 frontend tests green. Browser-verified against the
+seeded demo — grouped upload of 3 files produced one slot with 3 variants; the
+history tree drew 3 columns with uploader, date and verdict per node plus the
+approval stamp; the two archived columns read "Superseded by variant 2" and
+"Superseded by variant 2 · 1 defect left open"; re-approving a different variant
+moved the win and left exactly one approved variant; the pre-slot demo image
+listed as a synthetic slot with the `slots` collection still empty.
 
 ## Phase 7 — Brand guardian: palette (Aug 20–22)
 
@@ -192,6 +223,48 @@ Tasks:
 - End-to-end: a violating image produces a `BRAND-*` defect whose comment
   carries the measured ΔE; an unconfirmed profile produces zero brand defects
   (asserted by test)
+
+**Built 2026-08-16.** Two deviations from the task list, both deliberate:
+
+- The maths lives in `domain/color.py` (pure: sRGB→Lab, CIEDE2000) and only the
+  Pillow work in `imaging/palette.py`, rather than both in `imaging/`. AGENTS.md
+  makes `domain/` the home for exhaustively-tested pure logic, and ΔE against
+  published reference pairs is exactly that.
+- ΔE2000, not CIE76. It has a canonical verification dataset, and it disagrees
+  with plain Lab distance by a factor of two precisely in near-neutrals and
+  saturated blues — the colours brands care most about.
+
+The split that makes a brand defect defensible: measurement is arithmetic the
+Owner can re-derive and is stamped into the comment by code, never retyped by
+the model (`attach_measurement`); the Inspector is asked only whether the
+measured thing is a designed element or scene content.
+
+**Gate 7 evidence (2026-08-16) — partially verified.**
+
+Passing and checked:
+- ΔE2000 against all 33 Sharma/Wu/Dalal verification pairs at **±0.0001**
+  (gate asked ±0.1). One expected value I first wrote from memory was wrong;
+  hand-deriving it confirmed the implementation and corrected the test.
+- Unconfirmed profile → zero measurements, asserted at unit, service and API
+  level, plus withdraw-keeps-the-colours. 861 backend tests green, 50 frontend.
+- Measurement layer recall **1.00 (10/10)** on planted off-palette designed
+  elements (`check_palette_eval --mechanical`). The same run flags 10/10
+  photographic blobs, which is correct and is the load the Inspector must carry
+  — locked in by a test so the division of labour cannot drift silently.
+- Browser-verified on the seeded demo: palette panel confirms, withdraws and
+  re-confirms; a `BRAND-PALETTE` defect renders carrying a real measurement
+  ("ΔE2000 13.4 from #1c1e2a (ink), which allows 4.0").
+
+**Not yet verified — needs model credentials, which this machine lacks:**
+- Full-pipeline recall and false-positive numbers. The gate's ≤ 1 FP across 10
+  clean images means the Inspector must reject ~10/10 photographic blobs; the
+  mechanical run shows it gets no help from the measurement in doing so. **This
+  is the real risk in Phase 7 and it is untested.** Run
+  `uv run python -m scripts.check_palette_eval` before the demo.
+- `scripts/check_brand_extraction.py` is written but has never been run: it
+  needs both credentials and a real brand PDF, which the repo does not carry.
+  The swatch-rendering half is covered by `tests/test_documents.py` against a
+  generated PDF whose colour exists only as a graphic.
 
 ## Phase 8 — Approved export (Aug 22) — closes the dead end
 

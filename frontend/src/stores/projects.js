@@ -49,6 +49,26 @@ export const useProjectsStore = defineStore('projects', {
       return created.project
     },
 
+    async rename(projectId, name) {
+      const updated = await api.post(`/api/projects/${projectId}/name`, { name })
+      const index = this.items.findIndex((entry) => entry.project.id === projectId)
+      if (index !== -1) this.items.splice(index, 1, updated)
+      if (this.current?.project.id === projectId) this.current = updated
+      return updated.project
+    },
+
+    /** What deleting this project would destroy — shown before the owner confirms. */
+    async deletePreview(projectId) {
+      return api.get(`/api/projects/${projectId}/delete_preview`)
+    },
+
+    async remove(projectId) {
+      const removed = await api.del(`/api/projects/${projectId}`)
+      this.items = this.items.filter((entry) => entry.project.id !== projectId)
+      if (this.current?.project.id === projectId) this.current = null
+      return removed
+    },
+
     async invite(projectId, email, role) {
       this.current = await api.post(`/api/projects/${projectId}/members`, { email, role })
     },
