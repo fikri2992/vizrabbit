@@ -82,6 +82,14 @@ export default {
     rows() {
       return this.outline()
     },
+    /**
+     * Depth drives the row, not position in the flattened list.
+     *
+     * Every v1 is a sibling of every other v1, so they belong on one line — and
+     * the two halves of a fork belong side by side, not stacked. Ordering rows by
+     * DFS position reads as a git log and quietly implies a sequence between
+     * branches that does not exist.
+     */
     layout() {
       const rows = this.rows
       const leaves = rows.filter((r) => !(this.childrenOf[r.node.id] || []).length)
@@ -93,12 +101,13 @@ export default {
           cur = cur.parent ? this.byId[cur.parent] : null
         }
       })
-      const rowIndex = Object.fromEntries(rows.map((r, i) => [r.node.id, i]))
+      const depth = Object.fromEntries(rows.map((r) => [r.node.id, r.depth]))
+      const deepest = Math.max(0, ...rows.map((r) => r.depth))
       return {
         lane,
-        rowIndex,
+        depth,
         width: leaves.length * LANE_W,
-        height: rows.length * ROW_H + 24,
+        height: (deepest + 1) * ROW_H + 24,
       }
     },
     winningPaths() {
@@ -326,10 +335,10 @@ export default {
             <path
               v-for="row in rows.filter((r) => r.node.parent)"
               :key="`e-${row.node.id}`"
-              :d="`M ${layout.lane[row.node.parent] * LANE_W + NODE_W / 2} ${layout.rowIndex[row.node.parent] * ROW_H + 84}
-                   C ${layout.lane[row.node.parent] * LANE_W + NODE_W / 2} ${layout.rowIndex[row.node.id] * ROW_H - 4},
-                     ${layout.lane[row.node.id] * LANE_W + NODE_W / 2} ${layout.rowIndex[row.node.parent] * ROW_H + 104},
-                     ${layout.lane[row.node.id] * LANE_W + NODE_W / 2} ${layout.rowIndex[row.node.id] * ROW_H + 4}`"
+              :d="`M ${layout.lane[row.node.parent] * LANE_W + NODE_W / 2} ${layout.depth[row.node.parent] * ROW_H + 84}
+                   C ${layout.lane[row.node.parent] * LANE_W + NODE_W / 2} ${layout.depth[row.node.id] * ROW_H - 4},
+                     ${layout.lane[row.node.id] * LANE_W + NODE_W / 2} ${layout.depth[row.node.parent] * ROW_H + 104},
+                     ${layout.lane[row.node.id] * LANE_W + NODE_W / 2} ${layout.depth[row.node.id] * ROW_H + 4}`"
               fill="none"
               stroke-linecap="round"
               :stroke="onWinningPath.has(row.node.id) ? '#5eead4' : '#8b8b96'"
@@ -346,7 +355,7 @@ export default {
             :style="{
               width: `${NODE_W}px`,
               left: `${layout.lane[row.node.id] * LANE_W}px`,
-              top: `${layout.rowIndex[row.node.id] * ROW_H + 4}px`,
+              top: `${layout.depth[row.node.id] * ROW_H + 4}px`,
             }"
             :class="[
               isApproved(row.node)
@@ -390,8 +399,8 @@ export default {
         </div>
       </div>
       <p class="mx-auto mt-6 max-w-xl text-center text-[11px] text-neutral-400">
-        Take 2 — git-graph lanes. A fork is unmistakable: two curves leaving one node. The winning
-        path is drawn in teal.
+        Take 2 — rows are depth, so every v1 sits on one line and the two halves of a fork sit
+        side by side. The winning path is drawn in teal.
       </p>
     </div>
 
