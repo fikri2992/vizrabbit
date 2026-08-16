@@ -261,8 +261,10 @@ export default {
       this.zoom = next
     },
     onPanStart(event) {
-      // A press on a node is a selection, not a drag of the canvas beneath it.
-      if (event.target.closest('button, a, input')) return
+      // A press on a control is that control's, not a drag of the canvas beneath
+      // it. `label` matters as much as `button`: capturing the pointer retargets
+      // the click, so a label wrapping a file input would silently never open it.
+      if (event.target.closest('button, a, input, label')) return
       this.panning = true
       this.hovered = null
       this.panFrom = { x: event.clientX - this.pan.x, y: event.clientY - this.pan.y }
