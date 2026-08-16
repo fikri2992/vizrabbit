@@ -47,10 +47,12 @@ function daySlots(morning) {
 }
 
 function morningTree() {
+  // `look` drives the mock render: the defects are VISIBLE, so every claim the
+  // agent makes about a version can be checked against the thumbnail itself.
   return [
-    { id: 'a', parent: null, col: 0, row: 0, v: 'v1', who: 'Maya', tone: '#8a5a3b', state: '2 open', dot: '#FAC775' },
-    { id: 'b', parent: 'a', col: 0, row: 1, v: 'v2', who: 'QA agent', tone: '#9a6a45', state: 'Clean', dot: '#9FE1CB', draft: true },
-    { id: 'c', parent: null, col: 1, row: 0, v: 'v1', who: 'Leo', tone: '#7a4a2b', state: 'Clean', dot: '#9FE1CB' },
+    { id: 'a', parent: null, col: 0, row: 0, v: 'v1', who: 'Maya', look: 'broken', state: '2 open', dot: '#FAC775' },
+    { id: 'b', parent: 'a', col: 0, row: 1, v: 'v2', who: 'QA agent', look: 'fixed', state: 'Clean', dot: '#9FE1CB', draft: true },
+    { id: 'c', parent: null, col: 1, row: 0, v: 'v1', who: 'Leo', look: 'cropped', state: 'Clean', dot: '#9FE1CB' },
   ]
 }
 
@@ -344,9 +346,21 @@ export default {
             <!-- asked in place, answerable in place, ignorable forever -->
             <div v-if="tealOpen" class="mt-2 rounded-md bg-panel-2 p-2.5" @click.stop>
               <p class="text-[11px] leading-relaxed text-neutral-200">
-                Is this teal in brand? ΔE 2.2 from your confirmed teal — inside tolerance,
-                but it's on a CTA and I've been wrong about teal twice.
+                Is this teal in brand? Judge for yourself:
               </p>
+              <div class="mt-1.5 flex items-center gap-2">
+                <span class="flex flex-col items-center gap-0.5">
+                  <span class="h-7 w-12 rounded ring-1 ring-inset ring-white/15" style="background: #2fa584" />
+                  <span class="text-[9px] text-neutral-500">your brand teal</span>
+                </span>
+                <span class="flex flex-col items-center gap-0.5">
+                  <span class="h-7 w-12 rounded ring-1 ring-inset ring-white/15" style="background: #2aa47d" />
+                  <span class="text-[9px] text-neutral-500">this CTA</span>
+                </span>
+                <span class="self-start pt-1.5 text-[10px] text-neutral-400">
+                  ΔE 2.2 — near twins. But it's on a CTA, and I've been wrong about teal twice.
+                </span>
+              </div>
               <div class="mt-1.5 flex gap-1.5">
                 <button
                   type="button"
@@ -434,7 +448,23 @@ export default {
             @click="selected = node.id"
           >
             <div class="flex items-center gap-2.5">
-              <div class="h-9 w-12 shrink-0 rounded ring-1 ring-inset ring-white/10" :style="{ background: node.tone }" />
+              <!-- the defect is drawn, not described: dim headline, warped logo, clipped product -->
+              <div class="relative h-9 w-12 shrink-0 overflow-hidden rounded bg-[#8a5a3b] ring-1 ring-inset ring-white/10">
+                <template v-if="node.look !== 'cropped'">
+                  <span
+                    class="absolute bottom-[12%] left-[8%] h-[16%] w-[58%] rounded-[1px]"
+                    :style="{ background: node.look === 'fixed' ? '#f5ede2' : '#a3805e' }"
+                  />
+                  <span
+                    class="absolute right-[8%] top-[10%] h-[24%] w-[24%] rounded-[1px] bg-white/80"
+                    :class="node.look === 'broken' ? 'rotate-12' : ''"
+                  />
+                </template>
+                <span
+                  v-else
+                  class="absolute right-[-20%] top-1/2 aspect-square w-[58%] -translate-y-1/2 rounded-full bg-[#e8d9c5]"
+                />
+              </div>
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5">
                   <span class="font-mono text-xs text-neutral-100">{{ node.v }}</span>
@@ -472,10 +502,45 @@ export default {
           >
             <p class="text-[10px] uppercase tracking-wide text-teal-300">My call</p>
             <p class="mt-1 text-xs leading-relaxed text-neutral-200">
-              I'd ship <span class="font-mono">v2</span> — the draft. It clears both defects and
-              the headline reads 4.8:1. The other clean option (Leo's v1) crops into the product.
+              I'd ship <span class="font-mono">v2</span> — the draft. Don't take my word for it:
             </p>
-            <p class="mt-1 text-[10px] text-neutral-500">
+
+            <!-- every claim, checkable by eye -->
+            <div class="mt-2.5 grid grid-cols-3 gap-1.5">
+              <div>
+                <div class="relative aspect-[4/3] overflow-hidden rounded bg-[#8a5a3b] ring-1 ring-inset ring-white/10">
+                  <span class="absolute bottom-[12%] left-[8%] h-[14%] w-[58%] rounded-[2px] bg-[#a3805e]" />
+                  <span class="absolute right-[8%] top-[10%] h-[24%] w-[24%] rotate-12 rounded-[2px] bg-white/80" />
+                </div>
+                <p class="mt-1 text-center text-[9px] leading-tight text-neutral-500">
+                  v1 — read the headline.<br />measured 2.1:1
+                </p>
+              </div>
+              <div>
+                <div class="relative aspect-[4/3] overflow-hidden rounded bg-[#8a5a3b] ring-1 ring-inset ring-teal-400/50">
+                  <span class="absolute bottom-[12%] left-[8%] h-[14%] w-[58%] rounded-[2px] bg-[#f5ede2]" />
+                  <span class="absolute right-[8%] top-[10%] h-[24%] w-[24%] rounded-[2px] bg-white/80" />
+                </div>
+                <p class="mt-1 text-center text-[9px] leading-tight text-teal-200">
+                  v2 — now read it.<br />measured 4.8:1
+                </p>
+              </div>
+              <div>
+                <div class="relative aspect-[4/3] overflow-hidden rounded bg-[#7a4a2b] ring-1 ring-inset ring-white/10">
+                  <span class="absolute right-[-20%] top-1/2 aspect-square w-[58%] -translate-y-1/2 rounded-full bg-[#e8d9c5]" />
+                  <span class="absolute bottom-0 right-0 top-0 w-[2px] bg-blocker/70" />
+                </div>
+                <p class="mt-1 text-center text-[9px] leading-tight text-neutral-500">
+                  Leo's v1 — product hits<br />the frame edge
+                </p>
+              </div>
+            </div>
+
+            <ul class="mt-2 space-y-0.5 text-[10px] text-neutral-400">
+              <li>✓ headline contrast — 2.1:1 → 4.8:1 (brand floor 3:1)</li>
+              <li>✓ warped logo — compare the top-right corner of v1 and v2</li>
+            </ul>
+            <p class="mt-1.5 text-[10px] text-neutral-500">
               a recommendation, not a decision — overriding me teaches me
             </p>
             <div class="mt-2.5 flex gap-1.5">
