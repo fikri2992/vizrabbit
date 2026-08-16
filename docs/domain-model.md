@@ -14,8 +14,8 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 | **Grilling** | Agent interviews the user one question at a time to resolve ambiguity. Happens (a) at guideline upload, (b) on memory-rule collision. Never mid-scan. |
 | **Run** | One batch submission of N images through the pipeline. Uncapped parallel fan-out. |
 | **Slot** | One creative intent — "the hero banner". The unit of work. Holds competing variants; completes when the Owner approves one of them. |
-| **Variant** | A competing candidate for a slot, numbered from 1. Owns a linear version chain. Variants never merge and never fork: a competing fix is a new variant. |
-| **Version chain** | The strictly linear `v1 → v2 → …` lineage inside one variant, each version a re-check upload. Fixing a version that already has a successor is rejected — add a variant instead. |
+| **Variant** | A competing candidate for a slot, numbered from 1. Owns a version tree. Variants never merge. |
+| **Version tree** | The lineage inside one variant, each version a re-check upload pointing at the version it supersedes. Fixing a version that already has a successor *branches* the tree: both fixes are live siblings until the Owner approves one version, which archives everything off its path. |
 | **Archived variant** | A variant of a completed slot that did not win. Derived state, never stored: a variant is archived exactly while a *sibling* is approved. Reads as "superseded by variant N", never "rejected"; approving a different variant reverses it. |
 | **Grid** | 8×8 chess-labeled overlay (A1–H8), aspect-adapted so cells stay near-square. Labels drawn with high-contrast outline. |
 | **Suspect cell** | Grid cell flagged by the Scanner as possibly containing a defect. High recall by design. |
@@ -86,11 +86,12 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 11. Eval benchmark (week 1): ~30 images with known defects; naive single-prompt Gemini vs pipeline; recall/precision table shown in demo. Proves the workflow beats a wrapper.
 12. One accountable Brand Owner per project; resolution flows through agent re-check, never manual resolve (see Roles + lifecycle).
 10. Stack: Vue 3 + Vite + Tailwind / FastAPI + Python ADK / Firestore + GCS + Cloud Run.
-13. Slot → variants → linear version chain. Grouping is *offered* at upload (default: one slot per file), never a blocking question. Approval is per-variant and completes the slot.
+13. Slot → variants → version tree. Grouping is *offered* at upload (default: one slot per file), never a blocking question. Approval is per-variant and completes the slot. A second fix of the same version branches the tree rather than being rejected — exploration is the designer's call, and the approval pick is what settles which branch shipped.
 14. Archived is derived from "a sibling is approved", not a stored flag. A slot holds at most one approved variant, so approving another simply moves the approval — reversibility, and no migration, fall out of the derivation.
 15. Upload is the only review trigger. Every variant in a batch is reviewed on arrival; a fix re-checks only its own version; archiving and un-archiving never start or cancel a review, because an archived variant's verdicts stay true.
 16. Brand palettes are proposed by extraction and only ever enforced by Owner confirmation. An unconfirmed profile raises nothing — not "everything passes", not "everything fails". Silence is the honest answer when nobody has said what the brand colours are.
 17. The palette checker is split so each half does what it is good at: ΔE2000 measures (pure arithmetic, cited in the defect comment so the Owner can re-derive it), and the Inspector judges only whether the measured thing is a designed element or scene content. A brand defect therefore never rests on a model's opinion of a colour.
+18. A slot opens as a flow view: a pannable, zoomable tree with the slot at the root, variants branching beneath it and versions (including sibling branches) beneath those. Every version node links to the reviewer view — the tree is for orienting, the review screen is for judging.
 18. Guideline PDFs are rendered to page images, not just text-extracted, with a hard page budget. The colours worth catching are the ones printed as a swatch with no hex beside them, and those are invisible to a text reader.
 
 ## Open items

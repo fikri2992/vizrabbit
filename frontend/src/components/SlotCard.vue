@@ -1,6 +1,5 @@
 <script>
-import { archiveNote, liveVariants, slotPill, TONE_HEX, tipOf, versionTone } from '@/domain/slots'
-import { shortDate } from '@/domain/time'
+import { liveVariants, slotPill, tipOf } from '@/domain/slots'
 
 export default {
   name: 'SlotCard',
@@ -12,7 +11,7 @@ export default {
   },
   emits: ['add-variant', 'delete', 'rename'],
   data() {
-    return { showTree: false, menuOpen: false }
+    return { menuOpen: false }
   },
   computed: {
     pill() {
@@ -34,18 +33,6 @@ export default {
     },
   },
   methods: {
-    archiveNote,
-    shortDate,
-    tipOf,
-    toneHex(tone) {
-      return TONE_HEX[tone]
-    },
-    /** The verdict dot for one node of the tree. */
-    nodeTone(variant, version) {
-      return versionTone(version, {
-        approved: variant.approved && version.image.approved_by !== null,
-      })
-    },
     onVariantFile(fileList) {
       const file = Array.from(fileList).find((entry) => entry.type.startsWith('image/'))
       if (file) this.$emit('add-variant', { slotId: this.slot.slot_id, file })
@@ -60,8 +47,9 @@ export default {
     class="group relative overflow-hidden rounded-lg border border-edge bg-panel transition hover:border-edge-strong"
     @mouseleave="menuOpen = false"
   >
+    <!-- The card opens the flow view; the review screen is one node further in. -->
     <RouterLink
-      :to="{ name: 'review', params: { projectId, imageId: cover.image.id } }"
+      :to="{ name: 'slot-flow', params: { projectId, slotId: slot.slot_id } }"
       class="block"
     >
       <img
@@ -88,71 +76,14 @@ export default {
       </div>
     </RouterLink>
 
-    <!-- History: variants across, versions down. Never a diagonal — across is
-         alternatives, down is time. -->
+    <!-- The full history lives in the flow view now; the card just hints there is one. -->
     <div v-if="hasHistory" class="border-t border-edge px-3 py-2">
-      <button
-        type="button"
+      <RouterLink
+        :to="{ name: 'slot-flow', params: { projectId, slotId: slot.slot_id } }"
         class="text-[11px] text-neutral-500 hover:text-neutral-300"
-        @click="showTree = !showTree"
       >
-        {{ showTree ? 'Hide history' : 'History' }}
-      </button>
-
-      <div v-if="showTree" class="mt-2 flex gap-2 overflow-x-auto pb-1">
-        <div
-          v-for="variant in slot.variants"
-          :key="variant.variant"
-          class="min-w-[8.5rem] shrink-0 rounded border border-edge p-1.5"
-          :class="variant.archived_by !== null ? 'opacity-55' : ''"
-        >
-          <div class="flex items-baseline gap-1">
-            <span class="text-[10px] font-medium text-neutral-400">
-              Variant {{ variant.variant }}
-            </span>
-            <span
-              v-if="variant.archived_by !== null"
-              class="cursor-help text-[10px] text-neutral-600"
-              :title="archiveNote(variant)"
-            >
-              archived
-            </span>
-            <span v-else-if="variant.approved" class="text-[10px] text-teal-300">winner</span>
-          </div>
-
-          <RouterLink
-            v-for="version in variant.versions"
-            :key="version.image.id"
-            :to="{ name: 'review', params: { projectId, imageId: version.image.id } }"
-            class="mt-1 block rounded px-1.5 py-1 hover:bg-edge"
-          >
-            <div class="flex items-center gap-1.5">
-              <span
-                class="size-1.5 shrink-0 rounded-full"
-                :style="{ background: toneHex(nodeTone(variant, version)) }"
-              />
-              <span class="font-mono text-[11px] text-neutral-300">v{{ version.image.version }}</span>
-              <span class="truncate text-[10px] text-neutral-500">
-                {{ version.uploader_name || 'unknown' }}
-              </span>
-            </div>
-            <div class="pl-3 text-[10px] text-neutral-600">
-              {{ shortDate(version.image.created_at) }}
-              <template v-if="version.open_defects">
-                · {{ version.open_defects }} open
-              </template>
-            </div>
-          </RouterLink>
-
-          <!-- The audit answer reviewers actually ask for: who signed this off. -->
-          <div
-            v-if="variant.approved"
-            class="mt-1 rounded bg-teal-300/10 px-1.5 py-1 text-[10px] text-teal-200"
-          >
-            Approved by {{ variant.approved_by_name || 'the owner' }}
-          </div>
-        </div>
-      </div>
+        View history tree →
+      </RouterLink>
     </div>
 
     <div v-if="canUpload || canDelete" class="absolute right-2 top-2">

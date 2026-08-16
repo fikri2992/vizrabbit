@@ -18,6 +18,14 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // The slot flow view: the version tree behind one slot card (decision 18).
+    path: '/projects/:projectId/slots/:slotId',
+    name: 'slot-flow',
+    component: () => import('@/pages/SlotFlowPage.vue'),
+    props: true,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/projects/:projectId/images/:imageId',
     name: 'review',
     component: () => import('@/pages/ReviewPage.vue'),
@@ -34,13 +42,6 @@ const routes = [
       params: { projectId: to.params.projectId },
       query: { tab: 'activity' },
     }),
-  },
-  {
-    // PROTOTYPE — throwaway, delete with PrototypeSlotFlowPage.vue.
-    path: '/prototype/slot-flow',
-    name: 'prototype-slot-flow',
-    component: () => import('@/pages/PrototypeSlotFlowPage.vue'),
-    meta: { requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',

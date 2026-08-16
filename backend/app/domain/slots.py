@@ -26,11 +26,15 @@ class SlotState(StrEnum):
 
 
 class VariantChain(BaseModel):
-    """One competing candidate: its ordinal and its strictly linear version chain."""
+    """One competing candidate: its ordinal and its version tree.
+
+    ``versions`` is the tree in depth-first order, root first — parents always
+    precede their children, so linear chains read exactly as they used to.
+    Branching lives entirely in each asset's ``supersedes_id``.
+    """
 
     slot_id: str
     variant: int
-    #: Oldest first. Never branches — a competing fix becomes a new variant.
     versions: list[ImageAsset] = Field(default_factory=list)
 
     @property
@@ -38,9 +42,15 @@ class VariantChain(BaseModel):
         return self.versions[0]
 
     @property
+    def leaves(self) -> list[ImageAsset]:
+        """Versions nothing has fixed yet — the live ends of every branch."""
+        superseded = {asset.supersedes_id for asset in self.versions if asset.supersedes_id}
+        return [asset for asset in self.versions if asset.id not in superseded]
+
+    @property
     def tip(self) -> ImageAsset:
-        """The version that currently represents this variant."""
-        return self.versions[-1]
+        """The version that currently represents this variant: the newest leaf."""
+        return max(self.leaves, key=lambda asset: (asset.created_at, asset.id))
 
     @property
     def approved_version(self) -> ImageAsset | None:
@@ -89,30 +99,36 @@ class SlotGroup(BaseModel):
 
 
 def build_chains(images: Iterable[ImageAsset]) -> list[VariantChain]:
-    """Link images into version chains by ``supersedes_id``, oldest first.
+    """Link images into version trees by ``supersedes_id``, oldest root first.
 
     The root carries the authoritative ``slot_id``/``variant``: a fix inherits them,
-    and during the legacy read-path a root may predate slots entirely.
+    and during the legacy read-path a root may predate slots entirely. Children of
+    the same version are siblings — a branch — and are walked oldest first, so the
+    depth-first flattening is deterministic.
     """
     assets = list(images)
     by_id = {asset.id: asset for asset in assets}
-    successors = {
-        asset.supersedes_id: asset
-        for asset in sorted(assets, key=lambda a: (a.version, a.created_at))
-        if asset.supersedes_id
-    }
+    children: dict[str, list[ImageAsset]] = {}
+    for asset in sorted(assets, key=lambda a: (a.created_at, a.id)):
+        if asset.supersedes_id and asset.supersedes_id in by_id:
+            children.setdefault(asset.supersedes_id, []).append(asset)
 
     chains: list[VariantChain] = []
     for asset in sorted(assets, key=lambda a: (a.created_at, a.id)):
         if asset.supersedes_id and asset.supersedes_id in by_id:
             continue  # not a root; it will be walked from its own root
 
-        versions = [asset]
-        seen = {asset.id}
-        while (following := successors.get(versions[-1].id)) and following.id not in seen:
-            seen.add(following.id)
-            versions.append(following)
-
+        versions: list[ImageAsset] = []
+        seen: set[str] = set()
+        stack = [asset]
+        while stack:
+            node = stack.pop()
+            if node.id in seen:
+                continue  # a supersedes cycle in bad data must not hang the read path
+            seen.add(node.id)
+            versions.append(node)
+            # Reversed, so the oldest child comes off the stack first (depth-first).
+            stack.extend(reversed(children.get(node.id, [])))
         chains.append(
             VariantChain(
                 slot_id=asset.slot_id or asset.id,
@@ -153,16 +169,8 @@ def slot_state(group: SlotGroup, open_defects: Mapping[str, int]) -> SlotState:
     if group.is_complete:
         return SlotState.COMPLETE
     ready = any(
-        chain.tip.status is ImageStatus.DONE and not open_defects.get(chain.tip.id, 0)
+        leaf.status is ImageStatus.DONE and not open_defects.get(leaf.id, 0)
         for chain in group.variants
+        for leaf in chain.leaves
     )
     return SlotState.READY_TO_PICK if ready else SlotState.IN_REVIEW
-
-
-def successor_of(images: Iterable[ImageAsset], image: ImageAsset) -> ImageAsset | None:
-    """The version that already supersedes ``image``, if any.
-
-    Guards the linear-chain invariant: fixing a version that has been fixed once
-    would fork the chain, so callers reject it and offer a new variant instead.
-    """
-    return next((asset for asset in images if asset.supersedes_id == image.id), None)

@@ -24,7 +24,7 @@ export default {
   <div class="flex min-h-full flex-col">
     <header
       v-if="isAuthenticated"
-      class="flex items-center justify-between border-b border-edge px-6 py-3"
+      class="flex h-12 items-center justify-between border-b border-edge px-6"
     >
       <RouterLink to="/" class="font-semibold tracking-tight">Visual QA</RouterLink>
       <div class="flex items-center gap-3 text-sm">

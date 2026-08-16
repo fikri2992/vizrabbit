@@ -190,26 +190,36 @@ async def test_every_variant_in_a_batch_is_queued_for_review(store, blobs, proje
     assert {image.status for image in images} == {ImageStatus.QUEUED}
 
 
-# --- the linear-chain invariant -------------------------------------------
+# --- branching version trees (decision 13) --------------------------------
 
 
 @pytest.mark.anyio
-async def test_a_second_fix_of_the_same_version_is_rejected_as_a_fork(store, blobs, project):
+async def test_a_second_fix_of_the_same_version_branches_the_tree(store, blobs, project):
     run = await upload(store, blobs, project, ["hero.png"])
     original = (await repo.images_for_run(store, run.id))[0]
     owner = await stored_project(store, project)
 
-    await recheck_service.submit_fix(
+    first, _ = await recheck_service.submit_fix(
         store, blobs, owner, original, User(**OWNER), "hero-v2.png", png_bytes()
     )
-    with pytest.raises(recheck_service.ForkedChain, match="competing variant"):
-        await recheck_service.submit_fix(
-            store, blobs, owner, original, User(**OWNER), "hero-v2b.png", png_bytes()
-        )
+    second, _ = await recheck_service.submit_fix(
+        store, blobs, owner, original, User(**OWNER), "hero-v2b.png", png_bytes()
+    )
+
+    # Both fixes point at the same parent and live in the same variant's tree.
+    assert first.supersedes_id == original.id
+    assert second.supersedes_id == original.id
+    group = (await slot_service.project_slots(store, project))[0]
+    chain = group.variants[0]
+    assert {asset.id for asset in chain.versions} == {original.id, first.id, second.id}
+    assert {leaf.id for leaf in chain.leaves} == {first.id, second.id}
 
 
 @pytest.mark.anyio
-async def test_the_fork_rejection_reaches_the_client_as_a_conflict(client, store, blobs, project):
+async def test_the_branch_reaches_the_client_as_accepted_not_conflict(
+    client, store, blobs, project
+):
+    """Regression: this exact request used to 409 with "add a variant instead"."""
     run = await upload(store, blobs, project, ["hero.png"])
     original = (await repo.images_for_run(store, run.id))[0]
     await recheck_service.submit_fix(
@@ -222,8 +232,26 @@ async def test_the_fork_rejection_reaches_the_client_as_a_conflict(client, store
         f"/api/projects/{project}/images/{original.id}/versions",
         files={"file": ("hero-v2b.png", png_bytes(), "image/png")},
     )
-    assert response.status_code == 409
-    assert "variant" in response.json()["detail"]
+    assert response.status_code == 202
+    assert response.json()["version"]["supersedes_id"] == original.id
+
+
+@pytest.mark.anyio
+async def test_version_history_returns_the_whole_tree_not_one_walk(store, blobs, project):
+    run = await upload(store, blobs, project, ["hero.png"])
+    original = (await repo.images_for_run(store, run.id))[0]
+    owner = await stored_project(store, project)
+    first, _ = await recheck_service.submit_fix(
+        store, blobs, owner, original, User(**OWNER), "hero-v2.png", png_bytes()
+    )
+    second, _ = await recheck_service.submit_fix(
+        store, blobs, owner, original, User(**OWNER), "hero-v2b.png", png_bytes()
+    )
+
+    # Asked from either sibling, the answer is the same full tree, root first.
+    for asked in (original, first, second):
+        history = await recheck_service.version_history(store, asked)
+        assert [asset.id for asset in history] == [original.id, first.id, second.id]
 
 
 @pytest.mark.anyio

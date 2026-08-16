@@ -6,15 +6,12 @@ but the entities handed to it.
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from app.domain.entities import ImageAsset, ImageStatus
 from app.domain.slots import (
     SlotState,
     build_chains,
     group_into_slots,
     slot_state,
-    successor_of,
 )
 
 BASE = datetime(2026, 8, 16, 9, 0, tzinfo=UTC)
@@ -219,11 +216,44 @@ def test_state_reads_the_tip_not_a_superseded_version():
     assert slot_state(group, {"a": 9, "b": 0}) is SlotState.READY_TO_PICK
 
 
-# --- linear-chain guard ---------------------------------------------------
+# --- branching ------------------------------------------------------------
 
 
-@pytest.mark.parametrize("target,expected", [("a", "b"), ("b", None)])
-def test_successor_of_finds_the_fix_that_would_be_forked(target, expected):
-    images = [image("a", minutes=0), image("b", version=2, supersedes="a", minutes=2)]
-    found = successor_of(images, next(i for i in images if i.id == target))
-    assert (found.id if found else None) == expected
+def test_two_fixes_of_the_same_version_are_sibling_branches_of_one_chain():
+    chains = build_chains(
+        [
+            image("a", slot_id="s1", minutes=0),
+            image("b", slot_id="s1", version=2, supersedes="a", minutes=5),
+            image("c", slot_id="s1", version=2, supersedes="a", minutes=9),
+        ]
+    )
+    assert len(chains) == 1
+    # Depth-first, siblings oldest first: parents always precede children.
+    assert [asset.id for asset in chains[0].versions] == ["a", "b", "c"]
+    assert {leaf.id for leaf in chains[0].leaves} == {"b", "c"}
+    assert chains[0].tip.id == "c"  # the newest leaf speaks for the variant
+
+
+def test_depth_first_order_keeps_a_branchs_descendants_together():
+    chains = build_chains(
+        [
+            image("a", slot_id="s1", minutes=0),
+            image("b", slot_id="s1", version=2, supersedes="a", minutes=5),
+            image("c", slot_id="s1", version=2, supersedes="a", minutes=9),
+            image("b2", slot_id="s1", version=3, supersedes="b", minutes=12),
+        ]
+    )
+    assert [asset.id for asset in chains[0].versions] == ["a", "b", "b2", "c"]
+
+
+def test_any_clean_leaf_makes_a_branched_slot_ready_to_pick():
+    group = group_into_slots(
+        [
+            image("a", slot_id="s1", minutes=0),
+            image("b", slot_id="s1", version=2, supersedes="a", minutes=5),
+            image("c", slot_id="s1", version=2, supersedes="a", minutes=9),
+        ]
+    )[0]
+    # The newer branch is still dirty, but its clean sibling is pickable.
+    assert slot_state(group, {"a": 4, "b": 0, "c": 2}) is SlotState.READY_TO_PICK
+    assert slot_state(group, {"a": 4, "b": 3, "c": 2}) is SlotState.IN_REVIEW

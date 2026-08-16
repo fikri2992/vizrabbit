@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import {
   archiveNote,
+  flowNodes,
   groupingParam,
+  leavesOf,
   liveVariants,
   openDefects,
   slotCaption,
   slotPill,
+  tipOf,
   variantNeighbours,
   versionTone,
 } from './slots'
@@ -94,11 +97,69 @@ describe('openDefects', () => {
     const fixed = slot({
       variants: [
         variant(1, {
-          versions: [version({ open_defects: 9 }), version({ open_defects: 0 })],
+          versions: [
+            version({ image: { id: 'a' }, open_defects: 9 }),
+            version({ image: { id: 'b', version: 2, supersedes_id: 'a' }, open_defects: 0 }),
+          ],
         }),
       ],
     })
     expect(openDefects(fixed)).toBe(0)
+  })
+
+  it('counts every live branch, not just the newest one', () => {
+    const branched = slot({
+      variants: [
+        variant(1, {
+          versions: [
+            version({ image: { id: 'a' }, open_defects: 9 }),
+            version({ image: { id: 'b', version: 2, supersedes_id: 'a' }, open_defects: 1 }),
+            version({ image: { id: 'c', version: 2, supersedes_id: 'a' }, open_defects: 2 }),
+          ],
+        }),
+      ],
+    })
+    expect(openDefects(branched)).toBe(3)
+  })
+})
+
+describe('version trees', () => {
+  const tree = () =>
+    variant(1, {
+      versions: [
+        version({ image: { id: 'a', version: 1, created_at: '2026-08-14T09:00:00Z' } }),
+        version({
+          image: { id: 'b', version: 2, supersedes_id: 'a', created_at: '2026-08-15T09:00:00Z' },
+        }),
+        version({
+          image: { id: 'c', version: 2, supersedes_id: 'a', created_at: '2026-08-16T09:00:00Z' },
+        }),
+      ],
+    })
+
+  it('leaves are the live ends of every branch', () => {
+    expect(leavesOf(tree()).map((leaf) => leaf.image.id)).toEqual(['b', 'c'])
+  })
+
+  it('the tip is the newest leaf, not the last list entry by accident', () => {
+    expect(tipOf(tree()).image.id).toBe('c')
+  })
+
+  it('flowNodes points each version at its parent and names sibling branches', () => {
+    const nodes = flowNodes(slot({ variants: [tree()] }))
+    expect(nodes.map((node) => [node.id, node.parent, node.label])).toEqual([
+      ['a', null, 'v1'],
+      ['b', 'a', 'v2'],
+      ['c', 'a', 'v2 alt2'],
+    ])
+  })
+
+  it('a fix whose parent is outside the variant reads as a root, not a lost node', () => {
+    const orphan = variant(1, {
+      versions: [version({ image: { id: 'b', version: 2, supersedes_id: 'gone' } })],
+    })
+    expect(flowNodes(slot({ variants: [orphan] }))[0].parent).toBeNull()
+    expect(tipOf(orphan).image.id).toBe('b')
   })
 })
 

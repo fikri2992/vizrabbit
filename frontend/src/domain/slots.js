@@ -28,11 +28,59 @@ export function liveVariants(slot) {
 
 /** Open defects that still want someone. Archived variants are nobody's problem. */
 export function openDefects(slot) {
-  return liveVariants(slot).reduce((total, variant) => total + tipOf(variant).open_defects, 0)
+  return liveVariants(slot).reduce(
+    (total, variant) =>
+      total + leavesOf(variant).reduce((sum, leaf) => sum + leaf.open_defects, 0),
+    0,
+  )
 }
 
+/** Versions nothing has fixed yet — the live end of every branch of the tree. */
+export function leavesOf(variant) {
+  const superseded = new Set(
+    variant.versions.map((version) => version.image.supersedes_id).filter(Boolean),
+  )
+  return variant.versions.filter((version) => !superseded.has(version.image.id))
+}
+
+/** The version that currently represents a variant: its newest leaf. */
 export function tipOf(variant) {
-  return variant.versions[variant.versions.length - 1]
+  const leaves = leavesOf(variant)
+  return leaves.reduce(
+    (latest, leaf) => (leaf.image.created_at > latest.image.created_at ? leaf : latest),
+    leaves[0] || variant.versions[variant.versions.length - 1],
+  )
+}
+
+/**
+ * Flatten a slot into flow-canvas nodes: every version of every variant, each
+ * pointing at its parent (its superseded version, or nothing for a variant root).
+ *
+ * Sibling fixes of the same version share a version number, so the label
+ * disambiguates them positionally: the oldest keeps `v2`, the rest read `v2 alt2`…
+ */
+export function flowNodes(slot) {
+  const nodes = []
+  for (const variant of slot.variants) {
+    const ids = new Set(variant.versions.map((version) => version.image.id))
+    const siblingIndex = new Map() // parent id → how many children seen so far
+    for (const version of variant.versions) {
+      const parent =
+        version.image.supersedes_id && ids.has(version.image.supersedes_id)
+          ? version.image.supersedes_id
+          : null
+      const seen = parent ? (siblingIndex.get(parent) || 0) + 1 : 1
+      if (parent) siblingIndex.set(parent, seen)
+      nodes.push({
+        id: version.image.id,
+        parent,
+        variant,
+        version,
+        label: seen > 1 ? `v${version.image.version} alt${seen}` : `v${version.image.version}`,
+      })
+    }
+  }
+  return nodes
 }
 
 /**

@@ -21,7 +21,7 @@ from app.domain.entities import (
 from app.domain.grid import Grid
 from app.domain.lifecycle import DefectState, assert_transition
 from app.domain.permissions import Permission, require
-from app.domain.slots import successor_of
+from app.domain.slots import build_chains
 from app.imaging.canvas import from_bytes, to_png_bytes
 from app.imaging.grid_overlay import apply_grid
 from app.infra import repository as repo
@@ -32,10 +32,6 @@ from app.services.review import notify
 
 #: States a defect can be in and still be worth re-checking.
 AWAITING_FIX = frozenset({DefectState.OPEN, DefectState.NEEDS_HUMAN_REVIEW})
-
-
-class ForkedChain(ValueError):
-    """Raised when a fix would branch a version chain. The answer is a new variant."""
 
 
 def new_id() -> str:
@@ -57,15 +53,8 @@ async def submit_fix(
     """
     require(project, user.id, Permission.SUBMIT_FIX)
 
-    # Version chains are strictly linear: a second fix of the same version would
-    # fork it, and a fork is what variants are for (domain-model.md decision 13).
-    siblings = await repo.images_for_project(store, project.id)
-    already = successor_of(siblings, original)
-    if already is not None:
-        raise ForkedChain(
-            f"v{already.version} already fixes this version — "
-            "add a competing variant to the slot instead of forking the chain"
-        )
+    # A second fix of the same version is a branch, not an error (decision 13):
+    # both siblings stay live until the Owner's approval settles which one shipped.
 
     image = from_bytes(data)
     version = ImageAsset(
@@ -207,19 +196,13 @@ async def run_recheck(
 
 
 async def version_history(store: Store, image: ImageAsset) -> list[ImageAsset]:
-    """Every version of this asset, oldest first."""
+    """The whole version tree this asset belongs to, depth-first, root first.
+
+    Depth-first rather than a linear walk because chains branch now: a walk that
+    followed one successor would silently drop every sibling fix.
+    """
     everything = await repo.find(store, ImageAsset, where={"run_id": image.run_id})
-    by_id = {asset.id: asset for asset in everything}
-
-    root = image
-    while root.supersedes_id and root.supersedes_id in by_id:
-        root = by_id[root.supersedes_id]
-
-    chain = [root]
-    while True:
-        following = next(
-            (asset for asset in everything if asset.supersedes_id == chain[-1].id), None
-        )
-        if following is None:
-            return chain
-        chain.append(following)
+    for chain in build_chains(everything):
+        if any(asset.id == image.id for asset in chain.versions):
+            return chain.versions
+    return [image]

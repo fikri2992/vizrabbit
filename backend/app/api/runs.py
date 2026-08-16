@@ -237,14 +237,9 @@ async def submit_fix(
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "larger than 20MB")
 
-    try:
-        version, submitted = await recheck_service.submit_fix(
-            store, blobs, project, original, user, file.filename or original.filename, data
-        )
-    except recheck_service.ForkedChain as exc:
-        # 409, not 400: the request is well-formed, it just conflicts with a fix
-        # that already exists. The client's move is to add a variant.
-        raise HTTPException(409, str(exc)) from exc
+    version, submitted = await recheck_service.submit_fix(
+        store, blobs, project, original, user, file.filename or original.filename, data
+    )
     background.add_task(
         recheck_service.run_recheck, store, blobs, bus, project, original, version
     )
