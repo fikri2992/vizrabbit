@@ -124,12 +124,20 @@ async def images_for_project(store: Store, project_id: str) -> list[ImageAsset]:
     return await find(store, ImageAsset, where={"project_id": project_id}, order_by="created_at")
 
 
+#: Firestore needs a composite index for equality + order_by on another field, and
+#: it will not create one on demand — the query just fails. Neither of these two
+#: callers cares about order (one asks "any left?", the other builds a name map),
+#: so they sort in Python and cost no index at all.
+
+
 async def images_for_slot(store: Store, slot_id: str) -> list[ImageAsset]:
-    return await find(store, ImageAsset, where={"slot_id": slot_id}, order_by="created_at")
+    found = await find(store, ImageAsset, where={"slot_id": slot_id})
+    return sorted(found, key=lambda image: image.created_at)
 
 
 async def slots_for_project(store: Store, project_id: str) -> list[Slot]:
-    return await find(store, Slot, where={"project_id": project_id}, order_by="created_at")
+    found = await find(store, Slot, where={"project_id": project_id})
+    return sorted(found, key=lambda slot: slot.created_at)
 
 
 async def defects_for_image(store: Store, image_id: str) -> list[DefectRecord]:
