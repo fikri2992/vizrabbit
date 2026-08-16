@@ -43,6 +43,14 @@ function daySlots(morning) {
       variants: 1,
       pill: morning ? { label: 'Clean', dot: '#9FE1CB' } : { label: '1 open', dot: '#FAC775' },
     },
+    {
+      id: 'spot',
+      name: 'Launch spot',
+      tone: '#22303f',
+      video: '0:15',
+      variants: 1,
+      pill: { label: '2 open', dot: '#FAC775' },
+    },
   ]
 }
 
@@ -75,6 +83,10 @@ export default {
       stripDismissed: false,
       reviewVersion: 'fixed',
       activePin: null,
+      videoT: 0,
+      videoPlaying: false,
+      showOverlay: false,
+      cutListSent: false,
       toasts: [],
       toastSeq: 0,
     }
@@ -132,6 +144,35 @@ export default {
       this.toast('Draft discarded — it was only ever a branch. I will propose instead of draft for this slot from now on.')
     },
 
+    /** Scene for a given second — three shots, like the real thing after scene-cut detection. */
+    sceneAt(t) {
+      if (t < 5) return 'product'
+      if (t < 10) return 'headline'
+      return 'endcard'
+    },
+    togglePlay() {
+      if (this.videoPlaying) {
+        clearInterval(this._player)
+        this.videoPlaying = false
+        return
+      }
+      if (this.videoT >= 14.9) this.videoT = 0
+      this.videoPlaying = true
+      this._player = setInterval(() => {
+        this.videoT = Math.min(15, this.videoT + 0.1)
+        if (this.videoT >= 15) this.togglePlay()
+      }, 100)
+    },
+    jumpTo(t, overlay = false) {
+      if (this.videoPlaying) this.togglePlay()
+      this.videoT = t
+      if (overlay) this.showOverlay = true
+    },
+    sendCutList() {
+      this.cutListSent = true
+      this.toast('Cut list sent to Leo. Cuts are creative territory — I flag and specify, humans re-cut.')
+    },
+
     choosePlacement(where) {
       this.placement = where
       this.toast(
@@ -156,6 +197,7 @@ export default {
       return this.showNew && active ? 'outline outline-2 outline-offset-2 outline-warning/60' : ''
     },
     reset() {
+      if (this.videoPlaying) clearInterval(this._player)
       Object.assign(this.$data, {
         view: 'project',
         tab: 'assets',
@@ -171,6 +213,10 @@ export default {
         stripDismissed: false,
         reviewVersion: 'fixed',
         activePin: null,
+        videoT: 0,
+        videoPlaying: false,
+        showOverlay: false,
+        cutListSent: false,
       })
     },
   },
@@ -305,12 +351,21 @@ export default {
           v-for="slot in slots"
           :key="slot.id"
           class="group relative overflow-hidden rounded-lg border border-edge bg-panel transition hover:border-edge-strong"
-          :class="slot.id === 'hero' && morning ? 'cursor-pointer' : ''"
-          @click="slot.id === 'hero' && morning ? (view = 'slot') : null"
+          :class="(slot.id === 'hero' && morning) || slot.video ? 'cursor-pointer' : ''"
+          @click="slot.id === 'hero' && morning ? (view = 'slot') : slot.video ? (view = 'review-video') : null"
         >
-          <div class="aspect-square w-full" :style="{ background: slot.tone }" />
+          <div class="relative aspect-square w-full" :style="{ background: slot.tone }">
+            <span
+              v-if="slot.video"
+              class="absolute left-1/2 top-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-sm text-white"
+            >▶</span>
+          </div>
           <div class="flex items-center gap-2 px-3 py-2.5">
             <span class="min-w-0 truncate text-sm text-neutral-200">{{ slot.name }}</span>
+            <span
+              v-if="slot.video"
+              class="shrink-0 rounded-full border border-edge-strong px-1.5 text-[10px] text-neutral-500"
+            >video · {{ slot.video }}</span>
             <span
               v-if="slot.variants > 1"
               class="shrink-0 rounded-full border border-edge-strong px-1.5 text-[10px] text-neutral-500"
@@ -560,6 +615,153 @@ export default {
             <p class="mt-1.5 text-center text-[10px] text-neutral-600">
               either answer teaches the tolerance · "later" is fine too — just leave
             </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ REVIEW PAGE, video — timestamps are the new pins ═══════ -->
+    <div v-else-if="view === 'review-video'" class="mx-auto max-w-6xl px-6 py-5">
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          class="text-xs text-neutral-500 hover:text-neutral-200"
+          @click="videoPlaying && togglePlay(); view = 'project'"
+        >
+          ← Slots
+        </button>
+        <span class="text-sm text-neutral-100">launch_spot.mp4</span>
+        <span class="text-[11px] text-neutral-500">0:15 · 9:16 · 3 shots · for TikTok</span>
+      </div>
+
+      <div class="mt-4 grid gap-5 lg:grid-cols-[1fr_340px]">
+        <div class="mx-auto w-full max-w-[300px]">
+          <!-- the player: scenes change with the scrubber, like the real thing -->
+          <div class="relative aspect-[9/16] overflow-hidden rounded-lg ring-1 ring-inset ring-white/10">
+            <!-- shot 1: product + CTA low in frame -->
+            <div v-if="sceneAt(videoT) === 'product'" class="absolute inset-0 bg-[#22303f]">
+              <span class="absolute left-1/2 top-[30%] size-24 -translate-x-1/2 rounded-full bg-[#e8d9c5]" />
+              <span
+                class="absolute bottom-[6%] left-1/2 flex h-[6%] w-[64%] -translate-x-1/2 items-center justify-center rounded-full bg-[#2fa584] text-xs font-medium text-white"
+              >
+                SHOP NOW
+              </span>
+            </div>
+            <!-- shot 2: headline -->
+            <div v-else-if="sceneAt(videoT) === 'headline'" class="absolute inset-0 bg-[#2c3a2f]">
+              <span class="absolute left-1/2 top-1/2 w-full -translate-x-1/2 -translate-y-1/2 px-6 text-center text-xl font-semibold text-[#f2ede4]">
+                COMFORT, REDEFINED
+              </span>
+            </div>
+            <!-- shot 3: end card with too much text -->
+            <div v-else class="absolute inset-0 bg-[#1e2733] px-5 pt-[30%]">
+              <p class="text-[11px] leading-relaxed text-[#d8d2c8]">
+                Free shipping on all autumn orders over $50 while stocks last — terms apply,
+                see site for details.
+              </p>
+              <span class="mt-4 block text-center text-sm font-semibold text-white">BRAND™</span>
+            </div>
+
+            <!-- NEW · the platform's UI, drawn over the asset — the safe-area evidence -->
+            <div v-if="showOverlay" class="pointer-events-none absolute inset-0" :class="newClass()">
+              <div class="absolute bottom-0 left-0 right-0 h-[14%] border-t border-blocker/70 bg-white/10 backdrop-blur-[1px]">
+                <p class="px-3 pt-1.5 text-[9px] text-white/70">@yourbrand · caption sits here · #autumn</p>
+              </div>
+              <div class="absolute bottom-[16%] right-1.5 flex flex-col gap-2">
+                <span v-for="icon in ['♥', '💬', '↗']" :key="icon" class="flex size-7 items-center justify-center rounded-full bg-white/15 text-xs">{{ icon }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- NEW · the timeline: defects live ON it -->
+          <div class="mt-3" :class="newClass()">
+            <div class="relative">
+              <input
+                v-model.number="videoT"
+                type="range"
+                min="0"
+                max="15"
+                step="0.1"
+                class="w-full accent-neutral-200"
+              />
+              <!-- markers: amber = open defect, sitting at its timestamp -->
+              <span class="pointer-events-none absolute top-0 h-1.5 rounded bg-warning" style="left: 26%; width: 20%" />
+              <span class="pointer-events-none absolute top-0 h-1.5 rounded bg-warning" style="left: 73%; width: 13%" />
+            </div>
+            <div class="mt-1 flex items-center justify-between text-[10px] text-neutral-500">
+              <button type="button" class="rounded border border-neutral-600 px-2 py-0.5 text-neutral-200 hover:bg-edge" @click="togglePlay">
+                {{ videoPlaying ? '⏸' : '▶' }}
+              </button>
+              <span class="font-mono">0:{{ String(Math.floor(videoT)).padStart(2, '0') }} / 0:15</span>
+              <button
+                type="button"
+                class="rounded border border-neutral-600 px-2 py-0.5 hover:bg-edge"
+                :class="showOverlay ? 'bg-edge text-neutral-100' : 'text-neutral-300'"
+                @click="showOverlay = !showOverlay"
+              >
+                TikTok UI overlay
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- defect threads: every claim has a timestamp and a jump button -->
+        <div class="space-y-2.5">
+          <div class="rounded-lg border border-edge-strong bg-panel p-3">
+            <p class="text-xs text-neutral-100">1 · CTA hidden behind TikTok UI</p>
+            <p class="mt-1 text-[11px] leading-relaxed text-neutral-400">
+              0:04–0:07 — the SHOP NOW button sits inside the caption zone, which TikTok draws
+              over the bottom 14% of the frame. Measured overlap: the whole button.
+            </p>
+            <button
+              type="button"
+              class="mt-2 rounded-md border border-neutral-600 px-2 py-0.5 text-[10px] text-neutral-200 hover:bg-edge"
+              @click="jumpTo(4, true)"
+            >
+              Jump to 0:04 with the overlay on — watch it disappear
+            </button>
+          </div>
+
+          <div class="rounded-lg border border-edge-strong bg-panel p-3">
+            <p class="text-xs text-neutral-100">2 · End-card text too fast to read</p>
+            <p class="mt-1 text-[11px] leading-relaxed text-neutral-400">
+              0:11–0:13 — 19 words on screen for 1.8s. At a reading pace of 0.3s per word
+              plus a 1s floor, this needs <span class="text-neutral-200">≥ 6.7s</span>.
+            </p>
+            <button
+              type="button"
+              class="mt-2 rounded-md border border-neutral-600 px-2 py-0.5 text-[10px] text-neutral-200 hover:bg-edge"
+              @click="jumpTo(11)"
+            >
+              Jump to 0:11 — try reading it in two seconds
+            </button>
+          </div>
+
+          <!-- what passed is stated too, with its measurement -->
+          <div class="rounded-lg border border-edge bg-panel p-3 opacity-80">
+            <p class="text-xs text-neutral-300">✓ Audio loudness</p>
+            <p class="mt-1 text-[11px] text-neutral-500">
+              −13.8 LUFS against a −14 ±1 target · true peak −1.2 dB · no clipping
+            </p>
+          </div>
+
+          <!-- the persona split, stated where it applies -->
+          <div class="rounded-lg border border-teal-400/40 bg-teal-400/5 p-3" :class="newClass()">
+            <p class="text-[10px] uppercase tracking-wide text-teal-300">My call</p>
+            <p class="mt-1 text-[11px] leading-relaxed text-neutral-300">
+              Both fixes are cut changes — creative territory, so no draft from me. The cut
+              list: raise the CTA above the caption zone (or shorten it to clear 14%), and
+              hold the end card ≥ 6.7s or cut the copy to a line.
+            </p>
+            <button
+              v-if="!cutListSent"
+              type="button"
+              class="mt-2 w-full rounded-md bg-neutral-50 px-2 py-1 text-[11px] font-medium text-neutral-900"
+              @click="sendCutList"
+            >
+              Send the cut list to Leo
+            </button>
+            <p v-else class="mt-2 text-center text-[11px] text-teal-200/90">✓ Sent — the re-cut will arrive as v2</p>
           </div>
         </div>
       </div>
