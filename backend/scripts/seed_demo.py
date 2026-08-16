@@ -12,6 +12,7 @@ the reviewer's more limited controls).
 import asyncio
 import os
 import sys
+from pathlib import Path
 
 import uvicorn
 from PIL import Image, ImageDraw
