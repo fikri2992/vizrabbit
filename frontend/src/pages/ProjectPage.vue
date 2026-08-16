@@ -8,7 +8,6 @@ import MemoryPanel from '@/components/MemoryPanel.vue'
 import SlotCard from '@/components/SlotCard.vue'
 import TeamPanel from '@/components/TeamPanel.vue'
 import UploadStaging from '@/components/UploadStaging.vue'
-import { tipOf } from '@/domain/slots'
 import { useProjectsStore } from '@/stores/projects'
 import { useReviewStore } from '@/stores/review'
 import { useSlotsStore } from '@/stores/slots'
@@ -27,7 +26,10 @@ export default {
   props: { projectId: { type: String, required: true } },
   data() {
     return {
-      tab: 'assets',
+      // Run-finished notifications redirect here asking for the activity tab.
+      tab: ['assets', 'activity', 'settings'].includes(this.$route.query.tab)
+        ? this.$route.query.tab
+        : 'assets',
       dragging: false,
       staged: [], // files waiting on the grouping decision
       deleting: null, // { slot, preview } while the modal is open
@@ -35,6 +37,7 @@ export default {
       deleteError: '',
       renaming: null,
       renameValue: '',
+      renameError: '',
     }
   },
   computed: {
@@ -71,6 +74,9 @@ export default {
     },
   },
   async created() {
+    // Each step reports its own failure into the store's `error`; the stream
+    // starts regardless, so a slow or failing first load still recovers as soon
+    // as the agent publishes anything.
     await useProjectsStore().fetchOne(this.projectId)
     await this.fetchSlots(this.projectId)
     this.startStream(this.projectId)
@@ -96,7 +102,15 @@ export default {
     async confirmUpload({ grouped }) {
       const files = this.staged
       this.staged = []
-      const run = await this.upload(this.projectId, files, { grouped })
+      let run
+      try {
+        run = await this.upload(this.projectId, files, { grouped })
+      } catch {
+        // Put the strip back rather than making them re-pick the files; the
+        // store has already put the reason on screen.
+        this.staged = files
+        return
+      }
       // Straight into review — the agent works alongside, not in front of, the user.
       const first = run?.image_ids?.[0]
       if (first) {
@@ -105,7 +119,12 @@ export default {
     },
 
     async onAddVariant({ slotId, file }) {
-      const created = await this.addVariant(this.projectId, slotId, file)
+      let created
+      try {
+        created = await this.addVariant(this.projectId, slotId, file)
+      } catch {
+        return // the store surfaced the reason
+      }
       if (created?.id) {
         this.$router.push({
           name: 'review',
@@ -142,16 +161,17 @@ export default {
     askRename(slot) {
       this.renaming = slot
       this.renameValue = slot.name
+      this.renameError = ''
     },
 
     async confirmRename() {
       if (!this.renameValue.trim()) return
-      await this.rename(this.projectId, this.renaming.slot_id, this.renameValue.trim())
-      this.renaming = null
-    },
-
-    coverOf(slot) {
-      return tipOf(slot.variants[0])
+      try {
+        await this.rename(this.projectId, this.renaming.slot_id, this.renameValue.trim())
+        this.renaming = null
+      } catch (error) {
+        this.renameError = error.message
+      }
     },
   },
 }
@@ -366,6 +386,7 @@ export default {
           class="mt-3 w-full rounded-md border border-edge-strong bg-panel px-2.5 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-500"
           @keyup.enter="confirmRename"
         />
+        <p v-if="renameError" class="mt-2 text-xs text-blocker">{{ renameError }}</p>
         <div class="mt-4 flex justify-end gap-2">
           <button
             type="button"

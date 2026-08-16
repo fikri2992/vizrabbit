@@ -24,6 +24,21 @@ const routes = [
     props: true,
     meta: { requiresAuth: true },
   },
+  {
+    // Run-finished notifications link here. There is no per-run screen — the
+    // project's Activity tab is what the reader actually wants — but the link is
+    // already stored on notifications in the wild, so it has to land somewhere.
+    path: '/projects/:projectId/runs/:runId',
+    redirect: (to) => ({
+      name: 'project',
+      params: { projectId: to.params.projectId },
+      query: { tab: 'activity' },
+    }),
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: { name: 'dashboard' },
+  },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

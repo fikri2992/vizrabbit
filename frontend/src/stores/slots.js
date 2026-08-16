@@ -29,10 +29,20 @@ export const useSlotsStore = defineStore('slots', {
   },
 
   actions: {
+    /**
+     * Load the work list. A failure here is reported, never thrown on:
+     * this runs from the page's `created`, and an escaping rejection there
+     * leaves the component half-mounted and the UI frozen with no message —
+     * which looks exactly like a hung upload.
+     */
     async fetchSlots(projectId) {
       this.loading = true
+      this.error = ''
       try {
         this.slots = await api.get(`/api/projects/${projectId}/slots`)
+      } catch (error) {
+        this.error = error.message
+        this.slots = []
       } finally {
         this.loading = false
       }
