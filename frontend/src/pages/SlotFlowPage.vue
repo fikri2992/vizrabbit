@@ -45,6 +45,9 @@ export default {
     canFix() {
       return useProjectsStore().can('submit_fix')
     },
+    canUpload() {
+      return useProjectsStore().can('upload_images')
+    },
     nodes() {
       return this.slot ? flowNodes(this.slot) : []
     },
@@ -297,6 +300,27 @@ export default {
         params: { projectId: this.projectId, imageId: node.id },
       })
     },
+    /**
+     * A new competing candidate for the slot: a fresh trunk beside the others,
+     * not a fix of anything. It hangs off the slot node because that is where
+     * variants branch from, so the affordance sits where the split happens.
+     */
+    async onVariantFile(fileList) {
+      const file = Array.from(fileList).find((entry) => entry.type.startsWith('image/'))
+      if (!file) return
+      this.busy = true
+      this.actionError = ''
+      try {
+        const created = await useSlotsStore().addVariant(this.projectId, this.slotId, file)
+        if (created?.id) this.selected = created.id
+        this.$nextTick(this.fit)
+      } catch (error) {
+        this.actionError = error.message
+      } finally {
+        this.busy = false
+      }
+    },
+
     /** A new fix under the selected version — a branch if one already exists. */
     async onBranchFile(fileList) {
       const file = Array.from(fileList).find((entry) => entry.type.startsWith('image/'))
@@ -466,6 +490,21 @@ export default {
               <div class="text-[10px] uppercase tracking-widest text-neutral-400">Slot</div>
               <div class="mt-0.5 truncate text-sm font-medium text-neutral-50">{{ slot.name }}</div>
               <div class="mt-1 text-[10px] leading-relaxed text-neutral-400">{{ summary }}</div>
+
+              <!-- Variants branch from the slot, so the control to add one lives here. -->
+              <label
+                v-if="canUpload"
+                class="absolute -bottom-3 left-1/2 -translate-x-1/2 cursor-pointer whitespace-nowrap rounded-full border border-neutral-500 bg-panel px-2 py-0.5 text-[10px] text-neutral-200 shadow-lg shadow-black/50 hover:border-neutral-300 hover:bg-edge"
+                :class="busy ? 'pointer-events-none opacity-50' : ''"
+              >
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  class="hidden"
+                  @change="onVariantFile($event.target.files)"
+                />
+                {{ busy ? 'Uploading…' : '+ variant' }}
+              </label>
             </div>
 
             <button
@@ -537,6 +576,22 @@ export default {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Upload failures must be visible from the canvas: the rail that used to
+         carry them is hidden below xl, and "+ variant" needs no selection. -->
+    <div
+      v-if="actionError"
+      class="fixed bottom-4 left-1/2 z-40 flex max-w-md -translate-x-1/2 items-center gap-3 rounded-lg border border-blocker/50 bg-panel-2 px-3 py-2 shadow-2xl shadow-black/70 xl:left-[calc(50%-170px)]"
+    >
+      <span class="text-xs text-blocker">{{ actionError }}</span>
+      <button
+        type="button"
+        class="ml-auto text-xs text-neutral-500 hover:text-neutral-200"
+        @click="actionError = ''"
+      >
+        Dismiss
+      </button>
     </div>
 
     <!-- hover preview: the asset at its natural aspect, uncropped -->
@@ -628,7 +683,6 @@ export default {
       <div v-else class="flex-1" />
 
       <div v-if="selectedNode" class="border-t border-edge-strong p-3">
-        <p v-if="actionError" class="mb-2 text-[11px] text-blocker">{{ actionError }}</p>
         <button
           type="button"
           class="w-full rounded-md bg-neutral-50 px-3 py-1.5 text-xs font-medium text-neutral-900 hover:bg-white"
