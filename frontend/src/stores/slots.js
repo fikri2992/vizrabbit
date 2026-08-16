@@ -117,6 +117,12 @@ export const useSlotsStore = defineStore('slots', {
       await this.fetchSlots(projectId)
     },
 
+    /** Throw an agent draft away: defects reopen, the slot stops getting drafts. */
+    async discardDraft(projectId, imageId) {
+      await api.post(`/api/projects/${projectId}/images/${imageId}/discard_draft`)
+      await this.fetchSlots(projectId)
+    },
+
     /** Wave one mark away, for this user, permanently. */
     async dismissMark(projectId, key) {
       await api.post(`/api/projects/${projectId}/slots/marks/dismiss`, { key })

@@ -11,6 +11,7 @@ from app.api.deps import BlobsDep, BusDep, ProjectDep, StoreDep, UserDep, guard
 from app.domain.entities import DefectRecord, DismissalRecord, ImageAsset, Run
 from app.domain.permissions import Permission
 from app.infra import repository as repo
+from app.services import drafts as draft_service
 from app.services import recheck as recheck_service
 from app.services import runs as run_service
 from app.services import slots as slot_service
@@ -247,6 +248,25 @@ async def submit_fix(
         recheck_service.run_recheck, store, blobs, bus, project, original, version
     )
     return FixSubmitted(version=version, submitted=submitted)
+
+
+@router.post("/projects/{project_id}/images/{image_id}/discard_draft", status_code=204)
+async def discard_draft(
+    image_id: str,
+    project: ProjectDep,
+    store: StoreDep,
+    blobs: BlobsDep,
+    user: UserDep,
+) -> None:
+    """Throw an agent draft away. Its defects reopen; the slot stops getting drafts."""
+    guard(project, user, Permission.SUBMIT_FIX)
+    draft = await repo.load(store, ImageAsset, image_id)
+    if draft is None or draft.project_id != project.id:
+        raise HTTPException(404, "image not found")
+    try:
+        await draft_service.discard_draft(store, blobs, project, draft)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/projects/{project_id}/images/{image_id}/versions")

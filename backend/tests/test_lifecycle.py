@@ -26,8 +26,14 @@ A = Actor
 PERMITTED: set[tuple[S, S, A]] = {
     (S.OPEN, S.FIX_SUBMITTED, A.OWNER),
     (S.OPEN, S.FIX_SUBMITTED, A.REVIEWER),
+    # Decision 21: the agent drafts fixes for mechanical defects — from OPEN only,
+    # never from needs_human_review, which is a question waiting on a person.
+    (S.OPEN, S.FIX_SUBMITTED, A.AGENT),
     (S.NEEDS_HUMAN_REVIEW, S.FIX_SUBMITTED, A.OWNER),
     (S.NEEDS_HUMAN_REVIEW, S.FIX_SUBMITTED, A.REVIEWER),
+    # Discarding a draft withdraws its fix and puts the defects back.
+    (S.FIX_SUBMITTED, S.OPEN, A.OWNER),
+    (S.FIX_SUBMITTED, S.OPEN, A.REVIEWER),
     (S.FIX_SUBMITTED, S.AGENT_RECHECKING, A.AGENT),
     (S.AGENT_RECHECKING, S.VERIFIED_RESOLVED, A.AGENT),
     (S.AGENT_RECHECKING, S.OPEN, A.AGENT),

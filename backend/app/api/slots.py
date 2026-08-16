@@ -61,6 +61,8 @@ class SlotView(BaseModel):
 
 
 def _display_name(project: Project, user_id: str) -> str:
+    if user_id.startswith("agent:"):
+        return "QA agent"
     member = project.member(user_id)
     if member is None:
         return "" if not user_id else "someone no longer on the project"

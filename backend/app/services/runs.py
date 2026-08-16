@@ -284,6 +284,13 @@ async def execute_run(
         f"Run finished: {len(run.image_ids)} image(s) reviewed",
         link=f"/projects/{project.id}/runs/{run.id}",
     )
+
+    # One drafting pass per run, after every verdict has landed (decision 21).
+    # Deferred import: drafts uses recheck, which lives above this module.
+    if run.status is RunStatus.DONE:
+        from app.services import drafts as draft_service
+
+        await draft_service.draft_pass(store, blobs, bus, project, run)
     return run
 
 

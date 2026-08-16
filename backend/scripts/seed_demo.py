@@ -274,10 +274,45 @@ async def seed() -> None:
 
     await seed_brand_profile(store)
     variants = await seed_variant_slot(store, blobs)
+    await seed_agent_draft(store, blobs, asset)
 
     print(f"seeded project {PROJECT_ID}: 1 legacy image, {len(DEMO_DEFECTS)} defects")
     print(f"plus 1 slot with {variants} competing variants (one approved, one with a v2 fix)")
+    print("plus an agent-drafted fix on the legacy image (decision 21)")
     print("sign in as owner@acme.com (owner) or dee@acme.com (reviewer)")
+
+
+async def seed_agent_draft(store, blobs, original: ImageAsset) -> None:
+    """A clean agent draft superseding the legacy image — decision 21 on screen.
+
+    What the drafting pass would have produced: authored by the agent, recheck
+    passed (no open defects), so the stance recommends it and discard is live.
+    """
+    from app.services.drafts import AGENT_USER_ID
+
+    image = mock_asset()
+    grid = Grid.for_image(image.width, image.height)
+    draft = ImageAsset(
+        id="i-demo-draft",
+        project_id=PROJECT_ID,
+        run_id=original.run_id,
+        filename=original.filename,
+        slot_id=original.slot_id,
+        variant=original.variant,
+        version=original.version + 1,
+        uploaded_by=AGENT_USER_ID,
+        supersedes_id=original.id,
+        width=image.width,
+        height=image.height,
+        status=ImageStatus.DONE,
+    )
+    draft.original_path = await blobs.write(
+        blob_path(PROJECT_ID, draft.id, ORIGINAL), to_png_bytes(image)
+    )
+    draft.gridded_path = await blobs.write(
+        blob_path(PROJECT_ID, draft.id, GRIDDED), to_png_bytes(apply_grid(image, grid))
+    )
+    await repo.save(store, draft)
 
 
 #: The palette the demo brand actually uses, matching mock_asset's colours.

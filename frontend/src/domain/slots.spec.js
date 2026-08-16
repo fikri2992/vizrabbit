@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest'
 import {
   archiveNote,
   flowNodes,
+  isAgentVersion,
   groupingParam,
   leavesOf,
   liveVariants,
   openDefects,
   slotCaption,
   slotPill,
+  stanceFor,
   tipOf,
   variantNeighbours,
   versionTone,
@@ -247,5 +249,66 @@ describe('variantNeighbours', () => {
   it('stops at the ends', () => {
     expect(variantNeighbours({ variant: 1, siblings }).previous).toBeNull()
     expect(variantNeighbours({ variant: 3, siblings }).next).toBeNull()
+  })
+})
+
+describe('stanceFor', () => {
+  const clean = (id, extra = {}) =>
+    version({ ...extra, image: { id, version: 1, status: 'done', ...(extra.image || {}) } })
+
+  it('is silent when nothing is pickable', () => {
+    const busy = slot({
+      variants: [variant(1, { versions: [clean('a', { open_defects: 2 })] })],
+    })
+    expect(stanceFor(busy)).toBeNull()
+    expect(stanceFor(slot({ state: 'complete' }))).toBeNull()
+  })
+
+  it('prefers the fix that demonstrably worked over a merely clean sibling', () => {
+    const s = slot({
+      variants: [
+        variant(1, {
+          versions: [
+            version({ image: { id: 'a', version: 1 }, open_defects: 3 }),
+            clean('b', { image: { id: 'b', version: 2, supersedes_id: 'a', created_at: '2026-08-01T00:00:00Z' } }),
+          ],
+        }),
+        variant(2, {
+          versions: [clean('c', { image: { id: 'c', version: 1, created_at: '2026-08-15T00:00:00Z' } })],
+        }),
+      ],
+    })
+    const stance = stanceFor(s)
+    expect(stance.imageId).toBe('b') // fixed 3 defects beats newer-but-untested
+    expect(stance.facts).toContain('supersedes v1 (3 open there)')
+    expect(stance.facts).toContain('1 other clean option(s)')
+  })
+
+  it('marks a recommendation that is an agent draft', () => {
+    const s = slot({
+      variants: [
+        variant(1, {
+          versions: [
+            version({ image: { id: 'a', version: 1 }, open_defects: 1 }),
+            clean('b', {
+              image: { id: 'b', version: 2, supersedes_id: 'a', uploaded_by: 'agent:qa' },
+            }),
+          ],
+        }),
+      ],
+    })
+    expect(stanceFor(s).draft).toBe(true)
+    expect(isAgentVersion(clean('x'))).toBe(false)
+  })
+
+  it('never recommends inside an archived variant', () => {
+    const s = slot({
+      variants: [
+        variant(1, { approved: true, versions: [clean('a', { image: { id: 'a', approved_by: 'u1' } })] }),
+        variant(2, { archived_by: 1, versions: [clean('b')] }),
+      ],
+    })
+    // complete slot → null (approval already happened)
+    expect(stanceFor(slot({ state: 'complete', variants: s.variants }))).toBeNull()
   })
 })

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     #                     `gemini-3.1-pro-preview`; plain `gemini-3.1-pro` 404s.
     model_flash: str = "gemini-3.7-flash"
     model_pro: str = "gemini-3.1-pro-preview"
+    #   image editing ("nano banana"): drafts fixes for mechanical defects
+    #   (decision 21). One call per image per run, aggregated instructions.
+    model_image_edit: str = "gemini-2.5-flash-image"
 
     # --- Pipeline caps (domain-model.md decisions 2, 5, 7) ----------------
     grid_cols: int = 8

@@ -123,6 +123,60 @@ export function groupingParam({ grouped = false, slotId = '' } = {}) {
   return grouped ? 'new' : null
 }
 
+/** A version the agent authored — drawn dashed, discardable (decision 21). */
+export function isAgentVersion(version) {
+  return (version.image.uploaded_by || '').startsWith('agent:')
+}
+
+/**
+ * The agent's stance: which pickable version it would ship, with computed facts
+ * only (decision 19 — no prose the owner cannot re-derive). Null when there is
+ * nothing to recommend: no clean finished version, or the slot is complete.
+ *
+ * Rule: among clean, finished leaves of live variants, prefer one that fixed a
+ * version which had open defects (a fix that demonstrably worked), then the
+ * newest. A recommendation is never an approval.
+ */
+export function stanceFor(slot) {
+  if (slot.state === 'complete') return null
+  const byId = new Map(
+    slot.variants.flatMap((variant) => variant.versions.map((v) => [v.image.id, v])),
+  )
+  const candidates = liveVariants(slot).flatMap((variant) =>
+    leavesOf(variant)
+      .filter((leaf) => leaf.image.status === 'done' && !leaf.open_defects)
+      .map((leaf) => ({ leaf, variant })),
+  )
+  if (!candidates.length) return null
+
+  const scored = candidates.map(({ leaf, variant }) => {
+    const parent = leaf.image.supersedes_id ? byId.get(leaf.image.supersedes_id) : null
+    return { leaf, variant, parent, fixed: parent ? parent.open_defects : 0 }
+  })
+  scored.sort(
+    (a, b) => b.fixed - a.fixed || (a.leaf.image.created_at < b.leaf.image.created_at ? 1 : -1),
+  )
+  const pick = scored[0]
+
+  const facts = ['0 open defects', 'review finished']
+  if (pick.parent) {
+    facts.push(
+      `supersedes v${pick.parent.image.version}` +
+        (pick.parent.open_defects
+          ? ` (${pick.parent.open_defects} open there)`
+          : ''),
+    )
+  }
+  if (scored.length > 1) facts.push(`${scored.length - 1} other clean option(s)`)
+  return {
+    imageId: pick.leaf.image.id,
+    version: pick.leaf,
+    variant: pick.variant.variant,
+    draft: isAgentVersion(pick.leaf),
+    facts,
+  }
+}
+
 /** Slot context for the review header: "variant 2 of 3 · v2". */
 export function slotCaption(context) {
   if (!context) return ''

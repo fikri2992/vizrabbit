@@ -181,6 +181,9 @@ class Slot(BaseModel):
     #: has, and nothing is ever computed as "missing".
     spec: list[str] = Field(default_factory=list)
     due_at: datetime | None = None
+    #: Set when someone discards an agent draft here (decision 21): from then on
+    #: the agent proposes fixes for this slot instead of generating them.
+    no_drafts: bool = False
     created_at: datetime = Field(default_factory=now)
 
 

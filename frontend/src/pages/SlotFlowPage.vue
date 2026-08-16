@@ -1,7 +1,7 @@
 <script>
 import { mapState } from 'pinia'
 
-import { flowNodes, slotPill, TONE_HEX, versionTone } from '@/domain/slots'
+import { flowNodes, isAgentVersion, slotPill, stanceFor, TONE_HEX, versionTone } from '@/domain/slots'
 import { shortDate } from '@/domain/time'
 import { useProjectsStore } from '@/stores/projects'
 import { useReviewStore } from '@/stores/review'
@@ -150,6 +150,10 @@ export default {
     selectedNode() {
       return (this.selected && this.byId[this.selected]) || null
     },
+    /** The agent's recommendation (decision 21): computed facts, never prose. */
+    stance() {
+      return this.slot ? stanceFor(this.slot) : null
+    },
     previewStyle() {
       if (!this.hoverBox) return { display: 'none' }
       const node = this.byId[this.hovered]
@@ -197,6 +201,22 @@ export default {
     },
     isApproved(node) {
       return node.variant.approved && node.version.image.approved_by !== null
+    },
+    isDraft(node) {
+      return isAgentVersion(node.version)
+    },
+    async discardSelected() {
+      if (!this.selectedNode) return
+      this.busy = true
+      this.actionError = ''
+      try {
+        await useSlotsStore().discardDraft(this.projectId, this.selectedNode.id)
+        this.selected = null
+      } catch (error) {
+        this.actionError = error.message
+      } finally {
+        this.busy = false
+      }
     },
     /** Once anything is approved, everything off the shipped lineage dims. */
     isArchived(node) {
@@ -522,7 +542,9 @@ export default {
               :class="[
                 isApproved(row.node)
                   ? 'border-teal-400/70 bg-teal-400/10 shadow-teal-500/10'
-                  : 'border-edge-strong bg-panel-2 hover:border-neutral-500',
+                  : isDraft(row.node)
+                    ? 'border-dashed border-teal-400/60 bg-panel-2 hover:border-teal-300'
+                    : 'border-edge-strong bg-panel-2 hover:border-neutral-500',
                 isArchived(row.node) ? 'opacity-45 saturate-50' : '',
                 selected === row.node.id ? 'ring-2 ring-neutral-300' : '',
                 hovered === row.node.id ? 'z-10 -translate-y-0.5' : '',
@@ -546,6 +568,10 @@ export default {
                       v-if="!row.node.parent"
                       class="rounded-full border border-neutral-600 px-1.5 text-[9px] text-neutral-300"
                     >var {{ row.node.variant.variant }}</span>
+                    <span
+                      v-if="isDraft(row.node) && !isApproved(row.node)"
+                      class="rounded-full border border-dashed border-teal-400/60 px-1.5 text-[9px] text-teal-300"
+                    >draft</span>
                   </div>
                   <div class="truncate text-[11px] text-neutral-400">
                     {{ row.node.version.uploader_name || 'unknown' }} ·
@@ -684,6 +710,41 @@ export default {
       </div>
       <div v-else class="flex-1" />
 
+      <!-- The stance (decision 21): the claim in facts, the proof one click away. -->
+      <div v-if="stance" class="border-t border-edge-strong p-3">
+        <div class="rounded-lg border border-teal-400/40 bg-teal-400/5 p-2.5">
+          <p class="text-[10px] uppercase tracking-wide text-teal-300">My call</p>
+          <p class="mt-1 text-xs text-neutral-200">
+            I'd ship <span class="font-mono">v{{ stance.version.image.version }}</span>
+            (variant {{ stance.variant }}){{ stance.draft ? ' — my draft' : '' }}
+          </p>
+          <ul class="mt-1 text-[10px] leading-relaxed text-neutral-400">
+            <li v-for="fact in stance.facts" :key="fact">· {{ fact }}</li>
+          </ul>
+          <div class="mt-2 flex gap-1.5">
+            <button
+              type="button"
+              class="flex-1 rounded-md bg-neutral-50 px-2 py-1 text-[11px] font-medium text-neutral-900"
+              @click="selected = stance.imageId; openReview({ id: stance.imageId })"
+            >
+              Check it on review
+            </button>
+            <button
+              v-if="stance.draft && canFix"
+              type="button"
+              :disabled="busy"
+              class="rounded-md border border-neutral-600 px-2 py-1 text-[11px] text-neutral-300 hover:bg-edge disabled:opacity-50"
+              @click="selected = stance.imageId; discardSelected()"
+            >
+              Discard draft
+            </button>
+          </div>
+          <p class="mt-1.5 text-center text-[9px] text-neutral-600">
+            a recommendation, not a decision — approval stays yours
+          </p>
+        </div>
+      </div>
+
       <div v-if="selectedNode" class="border-t border-edge-strong p-3">
         <button
           type="button"
@@ -714,6 +775,15 @@ export default {
             @click="approveSelected"
           >
             Approve
+          </button>
+          <button
+            v-if="isDraft(selectedNode) && !isApproved(selectedNode) && canFix"
+            type="button"
+            :disabled="busy"
+            class="flex-1 rounded-md border border-neutral-600 px-2 py-1 text-[11px] text-neutral-300 hover:bg-edge disabled:opacity-50"
+            @click="discardSelected"
+          >
+            Discard draft
           </button>
         </div>
       </div>

@@ -42,11 +42,17 @@ TERMINAL_STATES: frozenset[DefectState] = frozenset(
 
 #: (from_state, to_state) -> actors permitted to make that move.
 TRANSITIONS: dict[tuple[DefectState, DefectState], frozenset[Actor]] = {
-    # A fix is submitted by uploading a new image version.
-    (DefectState.OPEN, DefectState.FIX_SUBMITTED): frozenset({Actor.OWNER, Actor.REVIEWER}),
+    # A fix is submitted by uploading a new image version. The AGENT may do this
+    # too — a drafted fix for a mechanical defect (decision 21) — but never for
+    # needs_human_review: a question waiting on a human is not the agent's to act on.
+    (DefectState.OPEN, DefectState.FIX_SUBMITTED): frozenset(
+        {Actor.OWNER, Actor.REVIEWER, Actor.AGENT}
+    ),
     (DefectState.NEEDS_HUMAN_REVIEW, DefectState.FIX_SUBMITTED): frozenset(
         {Actor.OWNER, Actor.REVIEWER}
     ),
+    # Withdrawing a submitted fix — discarding an agent draft puts its defects back.
+    (DefectState.FIX_SUBMITTED, DefectState.OPEN): frozenset({Actor.OWNER, Actor.REVIEWER}),
     # The agent picks the fix up and re-checks it.
     (DefectState.FIX_SUBMITTED, DefectState.AGENT_RECHECKING): frozenset({Actor.AGENT}),
     # Re-check outcome: closed, or bounced back as still-present.
