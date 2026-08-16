@@ -73,6 +73,8 @@ export default {
       tealAnswered: '',
       tealOpen: false,
       stripDismissed: false,
+      reviewVersion: 'fixed',
+      activePin: null,
       toasts: [],
       toastSeq: 0,
     }
@@ -167,6 +169,8 @@ export default {
         tealAnswered: '',
         tealOpen: false,
         stripDismissed: false,
+        reviewVersion: 'fixed',
+        activePin: null,
       })
     },
   },
@@ -396,6 +400,135 @@ export default {
       </div>
     </div>
 
+    <!-- ═══════════════ REVIEW PAGE (mock of the shipped one) ═══════════════ -->
+    <div v-else-if="view === 'review'" class="mx-auto max-w-6xl px-6 py-5">
+      <div class="flex items-center gap-3">
+        <button type="button" class="text-xs text-neutral-500 hover:text-neutral-200" @click="view = 'slot'">
+          ← Tree
+        </button>
+        <span class="text-sm text-neutral-100">hero_draft.png</span>
+        <span class="text-[11px] text-neutral-500">Variant 1 · v2 of 2</span>
+
+        <!-- the shipped version strip — flipping IS the verification -->
+        <div class="ml-6 flex gap-1" :class="newClass()">
+          <button
+            v-for="option in [
+              { id: 'broken', label: 'V1' },
+              { id: 'fixed', label: '★ V2 draft' },
+            ]"
+            :key="option.id"
+            type="button"
+            class="rounded-md px-2.5 py-1 text-xs"
+            :class="
+              reviewVersion === option.id
+                ? 'bg-neutral-50 font-medium text-neutral-900'
+                : 'border border-neutral-600 text-neutral-300 hover:bg-edge'
+            "
+            @click="reviewVersion = option.id"
+          >
+            {{ option.label }}
+          </button>
+          <span class="self-center pl-1 text-[10px] text-neutral-500">flip between them — see the claims yourself</span>
+        </div>
+      </div>
+
+      <div class="mt-4 grid gap-5 lg:grid-cols-[1fr_320px]">
+        <!-- the canvas: full-size, pins where the defects are -->
+        <div class="relative mx-auto w-full max-w-2xl">
+          <div class="relative aspect-[4/3] overflow-hidden rounded-lg bg-[#8a5a3b] ring-1 ring-inset ring-white/10">
+            <span
+              class="absolute bottom-[12%] left-[8%] flex h-[10%] w-[58%] items-center rounded pl-3 text-sm font-medium transition-colors duration-300"
+              :style="{ color: reviewVersion === 'fixed' ? '#f5ede2' : '#a3805e' }"
+            >
+              AUTUMN — UP TO 40% OFF
+            </span>
+            <span
+              class="absolute right-[8%] top-[8%] flex h-[16%] w-[16%] items-center justify-center rounded bg-white/85 text-[10px] font-semibold text-neutral-800 transition-transform duration-300"
+              :class="reviewVersion === 'broken' ? 'rotate-12' : ''"
+            >
+              LOGO
+            </span>
+
+            <!-- pins, exactly like the shipped review canvas -->
+            <button
+              type="button"
+              class="absolute bottom-[20%] left-[30%] flex size-6 items-center justify-center rounded-full text-[11px] font-semibold text-neutral-900 ring-2 ring-black/40"
+              :style="{ background: reviewVersion === 'fixed' ? '#9FE1CB' : '#FAC775' }"
+              @click="activePin = activePin === 1 ? null : 1"
+            >
+              1
+            </button>
+            <button
+              type="button"
+              class="absolute right-[6%] top-[26%] flex size-6 items-center justify-center rounded-full text-[11px] font-semibold text-neutral-900 ring-2 ring-black/40"
+              :style="{ background: reviewVersion === 'fixed' ? '#9FE1CB' : '#FAC775' }"
+              @click="activePin = activePin === 2 ? null : 2"
+            >
+              2
+            </button>
+          </div>
+          <p class="mt-2 text-center text-[11px] text-neutral-500">
+            {{ reviewVersion === 'fixed' ? 'the draft — headline readable, logo square' : 'Maya\'s v1 — try reading the headline' }}
+          </p>
+        </div>
+
+        <!-- defect threads, measurement stamped, resolution stated -->
+        <div class="space-y-2.5">
+          <div
+            class="rounded-lg border p-3 transition"
+            :class="activePin === 1 ? 'border-neutral-400 bg-panel' : 'border-edge-strong bg-panel'"
+          >
+            <p class="text-xs text-neutral-100">1 · Headline contrast below brand floor</p>
+            <p class="mt-1 text-[11px] leading-relaxed text-neutral-400">
+              Measured 2.1:1 on v1 against a floor of 3:1 (rule #2, from your brand PDF).
+              The draft moves it to <span class="text-neutral-200">4.8:1</span> — flip the
+              version strip and read the headline both ways.
+            </p>
+            <p class="mt-1.5 text-[10px]" :class="reviewVersion === 'fixed' ? 'text-teal-300' : 'text-warning'">
+              {{ reviewVersion === 'fixed' ? '✓ resolved in the draft you are looking at' : '● open on this version' }}
+            </p>
+          </div>
+          <div
+            class="rounded-lg border p-3 transition"
+            :class="activePin === 2 ? 'border-neutral-400 bg-panel' : 'border-edge-strong bg-panel'"
+          >
+            <p class="text-xs text-neutral-100">2 · Logo warped</p>
+            <p class="mt-1 text-[11px] leading-relaxed text-neutral-400">
+              Top-right corner, skewed ~12°. The draft redraws it square — flip and watch the corner.
+            </p>
+            <p class="mt-1.5 text-[10px]" :class="reviewVersion === 'fixed' ? 'text-teal-300' : 'text-warning'">
+              {{ reviewVersion === 'fixed' ? '✓ resolved in the draft you are looking at' : '● open on this version' }}
+            </p>
+          </div>
+
+          <!-- NEW · the stance travels with you, actions where the evidence is -->
+          <div class="rounded-lg border border-teal-400/40 bg-teal-400/5 p-3" :class="newClass()">
+            <p class="text-[10px] uppercase tracking-wide text-teal-300">My call</p>
+            <p class="mt-1 text-[11px] leading-relaxed text-neutral-300">
+              Ship this draft. Both defects resolve, nothing new appeared, and the alternative
+              clips the product.
+            </p>
+            <div class="mt-2 flex gap-1.5">
+              <button
+                type="button"
+                class="flex-1 rounded-md bg-neutral-50 px-2 py-1 text-[11px] font-medium text-neutral-900"
+                @click="makePick(); view = 'slot'"
+              >
+                Approve this version
+              </button>
+              <button
+                type="button"
+                class="flex-1 rounded-md border border-neutral-600 px-2 py-1 text-[11px] text-neutral-300"
+                @click="discardDraft(); view = 'slot'"
+              >
+                Discard draft
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══════════════ SLOT FLOW (mock of the shipped canvas) ═══════════════ -->
     <div v-else class="relative">
       <div
@@ -502,63 +635,26 @@ export default {
           >
             <p class="text-[10px] uppercase tracking-wide text-teal-300">My call</p>
             <p class="mt-1 text-xs leading-relaxed text-neutral-200">
-              I'd ship <span class="font-mono">v2</span> — the draft. Don't take my word for it:
+              I'd ship <span class="font-mono">v2</span> — the draft. It clears both defects;
+              the other clean option puts the product on the frame edge.
             </p>
-
-            <!-- every claim, checkable by eye -->
-            <div class="mt-2.5 grid grid-cols-3 gap-1.5">
-              <div>
-                <div class="relative aspect-[4/3] overflow-hidden rounded bg-[#8a5a3b] ring-1 ring-inset ring-white/10">
-                  <span class="absolute bottom-[12%] left-[8%] h-[14%] w-[58%] rounded-[2px] bg-[#a3805e]" />
-                  <span class="absolute right-[8%] top-[10%] h-[24%] w-[24%] rotate-12 rounded-[2px] bg-white/80" />
-                </div>
-                <p class="mt-1 text-center text-[9px] leading-tight text-neutral-500">
-                  v1 — read the headline.<br />measured 2.1:1
-                </p>
-              </div>
-              <div>
-                <div class="relative aspect-[4/3] overflow-hidden rounded bg-[#8a5a3b] ring-1 ring-inset ring-teal-400/50">
-                  <span class="absolute bottom-[12%] left-[8%] h-[14%] w-[58%] rounded-[2px] bg-[#f5ede2]" />
-                  <span class="absolute right-[8%] top-[10%] h-[24%] w-[24%] rounded-[2px] bg-white/80" />
-                </div>
-                <p class="mt-1 text-center text-[9px] leading-tight text-teal-200">
-                  v2 — now read it.<br />measured 4.8:1
-                </p>
-              </div>
-              <div>
-                <div class="relative aspect-[4/3] overflow-hidden rounded bg-[#7a4a2b] ring-1 ring-inset ring-white/10">
-                  <span class="absolute right-[-20%] top-1/2 aspect-square w-[58%] -translate-y-1/2 rounded-full bg-[#e8d9c5]" />
-                  <span class="absolute bottom-0 right-0 top-0 w-[2px] bg-blocker/70" />
-                </div>
-                <p class="mt-1 text-center text-[9px] leading-tight text-neutral-500">
-                  Leo's v1 — product hits<br />the frame edge
-                </p>
-              </div>
-            </div>
-
-            <ul class="mt-2 space-y-0.5 text-[10px] text-neutral-400">
-              <li>✓ headline contrast — 2.1:1 → 4.8:1 (brand floor 3:1)</li>
-              <li>✓ warped logo — compare the top-right corner of v1 and v2</li>
-            </ul>
-            <p class="mt-1.5 text-[10px] text-neutral-500">
-              a recommendation, not a decision — overriding me teaches me
+            <p class="mt-1 text-[10px] text-neutral-500">
+              a recommendation, not a decision — verify it where verifying lives:
             </p>
-            <div class="mt-2.5 flex gap-1.5">
-              <button
-                type="button"
-                class="flex-1 rounded-md bg-neutral-50 px-2 py-1 text-[11px] font-medium text-neutral-900"
-                @click="makePick"
-              >
-                Make it the pick
-              </button>
-              <button
-                type="button"
-                class="flex-1 rounded-md border border-neutral-600 px-2 py-1 text-[11px] text-neutral-300"
-                @click="discardDraft"
-              >
-                Discard the draft
-              </button>
-            </div>
+            <button
+              type="button"
+              class="mt-2.5 w-full rounded-md bg-neutral-50 px-2 py-1.5 text-[11px] font-medium text-neutral-900 hover:bg-white"
+              @click="view = 'review'"
+            >
+              Check it on the review page
+            </button>
+            <button
+              type="button"
+              class="mt-1.5 w-full rounded-md border border-neutral-600 px-2 py-1 text-[11px] text-neutral-300"
+              @click="discardDraft"
+            >
+              Discard the draft
+            </button>
           </div>
 
           <div v-else-if="picked" class="rounded-lg border border-teal-400/40 bg-teal-400/5 p-3 text-center">
