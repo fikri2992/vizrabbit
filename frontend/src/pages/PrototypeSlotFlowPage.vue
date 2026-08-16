@@ -310,16 +310,32 @@ export default {
       if (node.open) return { label: `${node.open} open`, dot: '#fbbf24' }
       return { label: 'Clean', dot: '#5eead4' }
     },
+    /**
+     * Elbow, not curve: drop from the parent, run along a shared horizontal bus,
+     * drop into the child.
+     *
+     * A bezier across a wide fan-out flattens into a near-horizontal streak that
+     * skims the row below and crosses its labels. The elbow stays legible at any
+     * width, and siblings share the bus line so the fan reads as one split rather
+     * than N unrelated strands.
+     */
     edge(node) {
       const l = this.layout
       const parentCol = node.parent === null ? l.rootColumn : l.column[node.parent]
       const parentDepth = node.parent === null ? 0 : l.depth[node.parent]
       const x1 = parentCol * this.COL_W + this.NODE_W / 2
-      const y1 = parentDepth * this.ROW_H + (node.parent === null ? 62 : 96)
+      const y1 = parentDepth * this.ROW_H + (node.parent === null ? 74 : 96)
       const x2 = l.column[node.id] * this.COL_W + this.NODE_W / 2
       const y2 = l.depth[node.id] * this.ROW_H + 4
-      const mid = (y1 + y2) / 2
-      return `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`
+      if (Math.abs(x1 - x2) < 1) return `M ${x1} ${y1} L ${x2} ${y2}`
+
+      const bus = y2 - 22
+      return `M ${x1} ${y1} L ${x1} ${bus} L ${x2} ${bus} L ${x2} ${y2}`
+    },
+    /** Zoom that makes the whole tree fit the available width. */
+    fit() {
+      const available = (this.$refs.scroller?.clientWidth || window.innerWidth) - 48
+      this.zoom = Math.max(0.3, Math.min(1, available / this.layout.width))
     },
     onEnter(node, event) {
       this.hovered = node.id
@@ -404,20 +420,31 @@ export default {
     />
 
     <!-- main canvas, room reserved for the chat rail -->
-    <div class="relative pb-28 pr-0 xl:pr-[352px]">
+    <div class="relative pr-0 xl:pr-[340px]">
       <!-- ═══ TREE ═══ -->
-      <div v-if="view === 'tree'" class="overflow-x-auto px-8 pt-10">
+      <div
+        v-if="view === 'tree'"
+        ref="scroller"
+        class="h-[calc(100vh-96px)] overflow-auto px-6 py-8"
+      >
+        <!--
+          Two boxes on purpose. A CSS transform does not change layout size, so a
+          scaled canvas inside a scroll container leaves the container reserving
+          the unscaled box — dead space below and a scrollbar for room that is not
+          there. The outer box carries the *scaled* dimensions; the inner one is
+          full size and scaled into it.
+        -->
         <div
-          class="mx-auto w-max"
-          :style="{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'top center',
-            marginBottom: `${(zoom - 1) * layout.height}px`,
-          }"
+          class="mx-auto"
+          :style="{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }"
         >
           <div
-            class="relative"
-            :style="{ width: `${layout.width}px`, height: `${layout.height}px` }"
+            class="relative origin-top-left"
+            :style="{
+              width: `${layout.width}px`,
+              height: `${layout.height}px`,
+              transform: `scale(${zoom})`,
+            }"
           >
             <svg class="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
               <path
@@ -522,7 +549,10 @@ export default {
       </div>
 
       <!-- ═══ OUTLINE ═══ -->
-      <div v-else class="mx-auto max-w-2xl space-y-1.5 px-8 pt-10">
+      <div
+        v-else
+        class="mx-auto h-[calc(100vh-96px)] max-w-2xl space-y-1.5 overflow-y-auto px-8 pt-10 pb-8"
+      >
         <div class="mb-3 text-center">
           <div class="text-sm font-medium text-neutral-50">{{ slot.name }}</div>
           <div class="text-[11px] text-neutral-400">{{ summary }}</div>
@@ -722,6 +752,13 @@ export default {
           zoom
           <input v-model.number="zoom" type="range" min="0.3" max="1" step="0.05" class="w-24" />
           <span class="w-8 font-mono text-neutral-300">{{ Math.round(zoom * 100) }}%</span>
+          <button
+            type="button"
+            class="rounded border border-neutral-600 px-1.5 py-0.5 text-[10px] text-neutral-200 hover:bg-edge"
+            @click="fit"
+          >
+            fit
+          </button>
         </label>
 
         <div class="flex gap-1">
