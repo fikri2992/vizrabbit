@@ -142,6 +142,9 @@ export default {
       hoverBox: null,
       draft: '',
       zoom: 1,
+      pan: { x: 0, y: 0 },
+      panning: false,
+      panFrom: { x: 0, y: 0 },
       collapsed: {},
     }
   },
@@ -260,9 +263,13 @@ export default {
       return { left: `${left}px`, top: `${top}px`, width: `${width}px` }
     },
   },
+  mounted() {
+    this.$nextTick(this.fit)
+  },
   methods: {
     setView(v) {
       this.$router.replace({ query: { ...this.$route.query, v } })
+      if (v === 'tree') this.$nextTick(this.fit)
     },
     rootOf(node) {
       let cur = node
@@ -291,8 +298,8 @@ export default {
       this.slot = which === 'messy' ? seedMessy() : seed()
       this.chats = which === 'messy' ? {} : seedChats()
       this.collapsed = {}
-      this.zoom = which === 'messy' ? 0.6 : 1
       this.selected = this.slot.approved[0] || this.slot.nodes[0].id
+      this.$nextTick(this.fit)
     },
     isApproved(node) {
       return this.slot.approved.includes(node.id)
@@ -332,10 +339,67 @@ export default {
       const bus = y2 - 22
       return `M ${x1} ${y1} L ${x1} ${bus} L ${x2} ${bus} L ${x2} ${y2}`
     },
-    /** Zoom that makes the whole tree fit the available width. */
+    /** Scale and centre the whole tree in the viewport. */
     fit() {
-      const available = (this.$refs.scroller?.clientWidth || window.innerWidth) - 48
-      this.zoom = Math.max(0.3, Math.min(1, available / this.layout.width))
+      const port = this.$refs.viewport
+      if (!port) return
+      const scale = Math.min(
+        (port.clientWidth - 96) / this.layout.width,
+        (port.clientHeight - 96) / this.layout.height,
+        1,
+      )
+      this.zoom = Math.max(0.15, Math.min(1, scale))
+      this.pan = {
+        x: (port.clientWidth - this.layout.width * this.zoom) / 2,
+        y: 32,
+      }
+    },
+
+    /**
+     * Zoom about the pointer, so whatever is under the cursor stays under it.
+     * Scaling about the origin instead makes the canvas slide away as you zoom,
+     * which is the thing that makes a diagram feel unpiloted.
+     */
+    onWheel(event) {
+      const port = this.$refs.viewport
+      if (!port) return
+      const rect = port.getBoundingClientRect()
+      const px = event.clientX - rect.left
+      const py = event.clientY - rect.top
+
+      const next = Math.max(0.15, Math.min(2, this.zoom * Math.exp(-event.deltaY * 0.0015)))
+      const k = next / this.zoom
+      this.pan = {
+        x: px - (px - this.pan.x) * k,
+        y: py - (py - this.pan.y) * k,
+      }
+      this.zoom = next
+    },
+
+    onPanStart(event) {
+      // A press on a node is a selection, not a drag of the canvas beneath it.
+      if (event.target.closest('button, a, input')) return
+      this.panning = true
+      this.hovered = null
+      this.panFrom = { x: event.clientX - this.pan.x, y: event.clientY - this.pan.y }
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    },
+    onPanMove(event) {
+      if (!this.panning) return
+      this.pan = { x: event.clientX - this.panFrom.x, y: event.clientY - this.panFrom.y }
+    },
+    onPanEnd(event) {
+      this.panning = false
+      event.currentTarget.releasePointerCapture?.(event.pointerId)
+    },
+    nudgeZoom(direction) {
+      const port = this.$refs.viewport
+      if (!port) return
+      this.onWheel({
+        clientX: port.getBoundingClientRect().left + port.clientWidth / 2,
+        clientY: port.getBoundingClientRect().top + port.clientHeight / 2,
+        deltaY: direction * -120,
+      })
     },
     onEnter(node, event) {
       this.hovered = node.id
@@ -422,30 +486,37 @@ export default {
     <!-- main canvas, room reserved for the chat rail -->
     <div class="relative pr-0 xl:pr-[340px]">
       <!-- ═══ TREE ═══ -->
+      <!--
+        A canvas, not a scroll area: drag to pan, wheel to zoom about the cursor.
+        Scrollbars made the tree feel like a long document rather than something
+        you move around in, and they cannot express zoom at all.
+      -->
       <div
         v-if="view === 'tree'"
-        ref="scroller"
-        class="h-[calc(100vh-96px)] overflow-auto px-6 py-8"
+        ref="viewport"
+        class="relative h-[calc(100vh-96px)] touch-none select-none overflow-hidden"
+        :class="panning ? 'cursor-grabbing' : 'cursor-grab'"
+        @wheel.prevent="onWheel"
+        @pointerdown="onPanStart"
+        @pointermove="onPanMove"
+        @pointerup="onPanEnd"
+        @pointercancel="onPanEnd"
+        @dblclick="fit"
       >
-        <!--
-          Two boxes on purpose. A CSS transform does not change layout size, so a
-          scaled canvas inside a scroll container leaves the container reserving
-          the unscaled box — dead space below and a scrollbar for room that is not
-          there. The outer box carries the *scaled* dimensions; the inner one is
-          full size and scaled into it.
-        -->
-        <div
-          class="mx-auto"
-          :style="{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }"
+        <p
+          class="pointer-events-none absolute bottom-3 left-4 z-10 text-[10px] text-neutral-500"
         >
-          <div
-            class="relative origin-top-left"
-            :style="{
-              width: `${layout.width}px`,
-              height: `${layout.height}px`,
-              transform: `scale(${zoom})`,
-            }"
-          >
+          drag to pan · scroll to zoom · double-click to fit
+        </p>
+        <div
+          class="absolute left-0 top-0 origin-top-left"
+          :style="{
+            width: `${layout.width}px`,
+            height: `${layout.height}px`,
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          }"
+        >
+          <div class="relative h-full w-full">
             <svg class="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
               <path
                 v-for="root in roots"
@@ -748,18 +819,34 @@ export default {
           </button>
         </div>
 
-        <label v-if="view === 'tree'" class="flex items-center gap-1.5 text-[11px] text-neutral-400">
-          zoom
-          <input v-model.number="zoom" type="range" min="0.3" max="1" step="0.05" class="w-24" />
-          <span class="w-8 font-mono text-neutral-300">{{ Math.round(zoom * 100) }}%</span>
+        <div v-if="view === 'tree'" class="flex items-center gap-1">
           <button
             type="button"
-            class="rounded border border-neutral-600 px-1.5 py-0.5 text-[10px] text-neutral-200 hover:bg-edge"
+            class="rounded border border-neutral-600 px-2 py-0.5 text-xs text-neutral-200 hover:bg-edge"
+            aria-label="Zoom out"
+            @click="nudgeZoom(-1)"
+          >
+            −
+          </button>
+          <span class="w-10 text-center font-mono text-[11px] text-neutral-300">
+            {{ Math.round(zoom * 100) }}%
+          </span>
+          <button
+            type="button"
+            class="rounded border border-neutral-600 px-2 py-0.5 text-xs text-neutral-200 hover:bg-edge"
+            aria-label="Zoom in"
+            @click="nudgeZoom(1)"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            class="ml-1 rounded border border-neutral-600 px-2 py-0.5 text-[11px] text-neutral-200 hover:bg-edge"
             @click="fit"
           >
-            fit
+            Fit
           </button>
-        </label>
+        </div>
 
         <div class="flex gap-1">
           <button
