@@ -44,6 +44,13 @@ const routes = [
     }),
   },
   {
+    // PROTOTYPE — throwaway, delete with PrototypePartnerPage.vue.
+    path: '/prototype/partner',
+    name: 'prototype-partner',
+    component: () => import('@/pages/PrototypePartnerPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: { name: 'dashboard' },
   },
