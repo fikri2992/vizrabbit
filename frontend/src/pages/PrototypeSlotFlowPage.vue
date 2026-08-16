@@ -263,7 +263,7 @@ export default {
             :key="row.node.id"
             class="flex flex-col items-center"
           >
-            <div v-if="row.depth" class="h-7 w-px bg-neutral-700" />
+            <div v-if="row.depth" class="h-7 w-0.5 rounded bg-neutral-500" />
             <button
               type="button"
               class="rounded-xl border p-2.5 text-left shadow-xl shadow-black/50 transition duration-150"
@@ -331,9 +331,10 @@ export default {
                      ${layout.lane[row.node.id] * LANE_W + NODE_W / 2} ${layout.rowIndex[row.node.parent] * ROW_H + 104},
                      ${layout.lane[row.node.id] * LANE_W + NODE_W / 2} ${layout.rowIndex[row.node.id] * ROW_H + 4}`"
               fill="none"
-              :stroke="onWinningPath.has(row.node.id) ? '#2dd4bf' : '#3f3f46'"
-              :stroke-width="onWinningPath.has(row.node.id) ? 2 : 1.5"
-              :opacity="isArchived(row.node) ? 0.35 : 1"
+              stroke-linecap="round"
+              :stroke="onWinningPath.has(row.node.id) ? '#5eead4' : '#8b8b96'"
+              :stroke-width="onWinningPath.has(row.node.id) ? 2.5 : 2"
+              :opacity="isArchived(row.node) ? 0.7 : 1"
             />
           </svg>
 
@@ -412,7 +413,7 @@ export default {
         @mouseenter="onEnter(row.node, $event)"
         @mouseleave="onLeave"
       >
-        <span v-if="row.depth" class="-ml-5 text-neutral-600">└</span>
+        <span v-if="row.depth" class="-ml-5 text-neutral-400">└</span>
         <div
           class="h-11 w-14 shrink-0 rounded ring-1 ring-inset ring-white/10"
           :style="{ background: row.node.tone }"
