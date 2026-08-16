@@ -349,3 +349,21 @@ class MarkDismissal(BaseModel):
     user_id: str
     key: str
     created_at: datetime = Field(default_factory=now)
+
+
+class PlacementDecision(BaseModel):
+    """A human closing a placement advisory (phase 9): acknowledged or waived.
+
+    Findings themselves are derived on read from geometry (decision 20) and
+    deliberately share nothing with the defect lifecycle — a platform changing
+    its chrome is not the asset's fault. ``key`` is the finding's stable
+    identity: ``{image_id}:{platform}:{kind}``.
+    """
+
+    id: str
+    project_id: str
+    image_id: str
+    key: str
+    decision: str  # acknowledged | waived
+    decided_by: str = ""
+    created_at: datetime = Field(default_factory=now)

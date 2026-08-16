@@ -20,6 +20,7 @@ from app.domain.entities import (
     MarkDismissal,
     MemoryRule,
     Notification,
+    PlacementDecision,
     Project,
     ReviewThread,
     Run,
@@ -45,6 +46,7 @@ COLLECTIONS: dict[type[BaseModel], str] = {
     Notification: "notifications",
     ReviewThread: "threads",
     MarkDismissal: "mark_dismissals",
+    PlacementDecision: "placement_decisions",
 }
 
 
@@ -146,6 +148,14 @@ async def dismissed_mark_keys(store: Store, project_id: str, user_id: str) -> se
     """Marks this user has waved away. No order_by — a set needs no index."""
     found = await find(store, MarkDismissal, where={"project_id": project_id, "user_id": user_id})
     return {dismissal.key for dismissal in found}
+
+
+async def placement_decisions_for_image(
+    store: Store, image_id: str
+) -> dict[str, PlacementDecision]:
+    """By finding key. No order_by — a map needs no index."""
+    found = await find(store, PlacementDecision, where={"image_id": image_id})
+    return {decision.key: decision for decision in found}
 
 
 async def defects_for_image(store: Store, image_id: str) -> list[DefectRecord]:

@@ -706,3 +706,65 @@ async def test_the_zip_holds_exactly_the_winners_latest_approved_originals(
 def test_export_with_nothing_approved_is_a_404_not_an_empty_zip(client, project):
     as_user(client, OWNER)
     assert client.get(f"/api/projects/{project}/export/approved").status_code == 404
+
+
+# --- Phase 9: placement advisories -------------------------------------------
+
+
+def test_placement_advisories_follow_the_runs_declared_platform(client, project):
+    as_user(client, OWNER)
+    # A 16:9-ish upload declared for TikTok: the crop advisory must fire.
+    wide = png_bytes(size=(640, 360))
+    run = client.post(
+        f"/api/projects/{project}/runs",
+        files=[("files", ("wide.png", wide, "image/png"))],
+        data={"placement": "tiktok"},
+    ).json()
+    image_id = run["image_ids"][0]
+
+    view = client.get(f"/api/projects/{project}/images/{image_id}/placement").json()
+    assert view["platform"] == "tiktok"
+    kinds = [f["kind"] for f in view["findings"]]
+    assert "crop_loss" in kinds and "resolution" in kinds
+    assert view["safe"]["height"] < view["crop"]["height"]  # the overlay has data
+
+    # Deciding one advisory sticks; the other still wants a decision.
+    key = view["findings"][0]["key"]
+    assert client.post(
+        f"/api/projects/{project}/images/{image_id}/placement/decide",
+        json={"key": key, "decision": "acknowledged"},
+    ).status_code == 204
+    again = client.get(f"/api/projects/{project}/images/{image_id}/placement").json()
+    decisions = {f["key"]: f["decision"] for f in again["findings"]}
+    assert decisions[key] == "acknowledged"
+    assert list(decisions.values()).count(None) == 1
+
+
+def test_no_declared_placement_means_no_advisories(client, project):
+    as_user(client, OWNER)
+    run = client.post(
+        f"/api/projects/{project}/runs",
+        files=[("files", ("a.png", png_bytes(size=(640, 360)), "image/png"))],
+    ).json()
+    view = client.get(f"/api/projects/{project}/images/{run['image_ids'][0]}/placement").json()
+    assert view == {"platform": "", "label": "", "findings": [], "crop": None, "safe": None}
+
+
+def test_placement_advisories_never_block_approval(client, store, blobs, project):
+    """Gate 9: advisory means advisory — approval flow untouched."""
+    as_user(client, OWNER)
+    run = client.post(
+        f"/api/projects/{project}/runs",
+        files=[("files", ("wide.png", png_bytes(size=(640, 360)), "image/png"))],
+        data={"placement": "tiktok"},
+    ).json()
+    image_id = run["image_ids"][0]
+
+    import anyio
+
+    async def make_done():
+        await finish(store, image_id)
+
+    anyio.run(make_done)
+    response = client.post(f"/api/projects/{project}/images/{image_id}/approve")
+    assert response.status_code == 200

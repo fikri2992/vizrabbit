@@ -149,8 +149,9 @@ describe('isClear', () => {
     expect(isClear([defect({ status: 'agent_rechecking' })])).toBe(false)
   })
 
-  it('is not clear while anything awaits a human', () => {
-    expect(isClear([defect({ status: 'needs_human_review' })])).toBe(false)
+  it('a question awaiting a human does not block — approving past it is an answer', () => {
+    // Changed by decision 19: needs_human_review is a question, not a flag.
+    expect(isClear([defect({ status: 'needs_human_review' })])).toBe(true)
   })
 })
 
@@ -174,5 +175,18 @@ describe('questions', () => {
   it('refuses prose that merely mentions a delta-E', () => {
     expect(parseMeasurement('the model thinks ΔE is big')).toBeNull()
     expect(parseMeasurement('')).toBeNull()
+  })
+})
+
+describe('isClear vs questions', () => {
+  it('an unanswered question never blocks the approve button', () => {
+    expect(isClear([{ status: 'needs_human_review', severity: 'warning' }])).toBe(true)
+    expect(isClear([{ status: 'open', severity: 'warning' }])).toBe(false)
+    expect(
+      isClear([
+        { status: 'needs_human_review', severity: 'warning' },
+        { status: 'fix_submitted', severity: 'warning' },
+      ]),
+    ).toBe(false)
   })
 })

@@ -67,6 +67,10 @@ export function summarize(defects) {
 
 /** An image is publishable when nothing is left awaiting a human or the agent. */
 export function isClear(defects) {
-  const { open, inFlight } = summarize(defects)
+  // An unanswered question never blocks (decision 19 glossary): only truly-open
+  // and in-flight work stands between an image and approval — mirroring the
+  // backend's approve_image gate exactly.
+  const blocking = defects.filter((defect) => !isQuestion(defect))
+  const { open, inFlight } = summarize(blocking)
   return open === 0 && inFlight === 0
 }

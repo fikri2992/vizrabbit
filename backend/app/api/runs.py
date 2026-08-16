@@ -2,13 +2,21 @@
 
 import asyncio
 import json
+from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import BlobsDep, BusDep, ProjectDep, StoreDep, UserDep, guard
-from app.domain.entities import DefectRecord, DismissalRecord, ImageAsset, Run
+from app.domain import platforms
+from app.domain.entities import (
+    DefectRecord,
+    DismissalRecord,
+    ImageAsset,
+    PlacementDecision,
+    Run,
+)
 from app.domain.permissions import Permission
 from app.infra import repository as repo
 from app.services import drafts as draft_service
@@ -248,6 +256,86 @@ async def submit_fix(
         recheck_service.run_recheck, store, blobs, bus, project, original, version
     )
     return FixSubmitted(version=version, submitted=submitted)
+
+
+class PlacementFindingView(BaseModel):
+    kind: str
+    detail: str
+    key: str
+    #: acknowledged | waived, or None while it still wants a decision.
+    decision: str | None = None
+
+
+class PlacementView(BaseModel):
+    """Advisories for this image on the platform its run declared (decision 22)."""
+
+    platform: str = ""
+    label: str = ""
+    findings: list[PlacementFindingView] = []
+    crop: platforms.CropBox | None = None
+    safe: platforms.CropBox | None = None
+
+
+@router.get("/projects/{project_id}/images/{image_id}/placement")
+async def image_placement(
+    image_id: str, project: ProjectDep, store: StoreDep
+) -> PlacementView:
+    """Derived on read, like marks: geometry now, decisions the only stored part."""
+    image = await repo.load(store, ImageAsset, image_id)
+    if image is None or image.project_id != project.id:
+        raise HTTPException(404, "image not found")
+    run = await repo.load(store, Run, image.run_id)
+    placement = (run.placement if run else "") or ""
+    if placement not in platforms.PLATFORMS:
+        return PlacementView()
+
+    decisions = await repo.placement_decisions_for_image(store, image_id)
+    findings = [
+        PlacementFindingView(
+            kind=f.kind,
+            detail=f.detail,
+            key=f.key_for(image_id),
+            decision=(d.decision if (d := decisions.get(f.key_for(image_id))) else None),
+        )
+        for f in platforms.check(image.width, image.height, placement)
+    ]
+    return PlacementView(
+        platform=placement,
+        label=platforms.PLATFORMS[placement]["label"],
+        findings=findings,
+        crop=platforms.crop_box(image.width, image.height, placement),
+        safe=platforms.safe_area(image.width, image.height, placement),
+    )
+
+
+class DecidePlacement(BaseModel):
+    key: str
+    decision: str  # acknowledged | waived
+
+
+@router.post("/projects/{project_id}/images/{image_id}/placement/decide", status_code=204)
+async def decide_placement(
+    image_id: str,
+    body: DecidePlacement,
+    project: ProjectDep,
+    store: StoreDep,
+    user: UserDep,
+) -> None:
+    """Close an advisory. Deliberately outside the defect lifecycle (gate 9)."""
+    guard(project, user, Permission.COMMENT)
+    if body.decision not in {"acknowledged", "waived"}:
+        raise HTTPException(400, "decision must be acknowledged or waived")
+    await repo.save(
+        store,
+        PlacementDecision(
+            id=uuid4().hex,
+            project_id=project.id,
+            image_id=image_id,
+            key=body.key.strip(),
+            decision=body.decision,
+            decided_by=user.id,
+        ),
+    )
 
 
 @router.post("/projects/{project_id}/images/{image_id}/discard_draft", status_code=204)

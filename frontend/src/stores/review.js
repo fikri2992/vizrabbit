@@ -214,6 +214,18 @@ export const useReviewStore = defineStore('review', {
       return api.get(`/api/projects/${projectId}/images/${imageId}/versions`)
     },
 
+    /** Placement advisories for the image's declared platform (phase 9). */
+    async fetchPlacement(projectId, imageId) {
+      return api.get(`/api/projects/${projectId}/images/${imageId}/placement`)
+    },
+
+    async decidePlacement(projectId, imageId, key, decision) {
+      await api.post(`/api/projects/${projectId}/images/${imageId}/placement/decide`, {
+        key,
+        decision,
+      })
+    },
+
     /** Answer a needs-human question. Either answer teaches (decision 19). */
     async answerQuestion(projectId, defectId, confirmed) {
       const result = await api.post(`/api/projects/${projectId}/defects/${defectId}/answer`, {

@@ -51,6 +51,8 @@ export default {
       notice: '',
       finishedNotice: '',
       versions: [],
+      placement: null, // phase 9 advisories for the run's declared platform
+      placementOverlay: false,
       replyDrafts: {},
       tools: TOOLS,
       colors: COLORS,
@@ -174,6 +176,8 @@ export default {
       'proposeMemoryRule',
       'approveImage',
       'submitFix',
+      'fetchPlacement',
+      'decidePlacement',
       'createThread',
       'replyThread',
       'resolveThread',
@@ -190,6 +194,9 @@ export default {
       this.fetchThreads(this.projectId, this.imageId)
       this.fetchDismissals(this.projectId, this.imageId)
       this.versions = await this.fetchVersions(this.projectId, this.imageId)
+      this.fetchPlacement(this.projectId, this.imageId)
+        .then((view) => (this.placement = view.platform ? view : null))
+        .catch(() => {})
       this.startStream(this.projectId)
       // Fresh upload: open on the agent's live narration instead of an empty rail.
       if (this.agentWorking) this.tab = 'activity'
@@ -294,6 +301,10 @@ export default {
       } catch (error) {
         this.notice = error.message
       }
+    },
+    async onDecidePlacement(key, decision) {
+      await this.decidePlacement(this.projectId, this.imageId, key, decision)
+      this.placement = await this.fetchPlacement(this.projectId, this.imageId)
     },
     async onAnswer({ confirmed }) {
       try {
@@ -454,6 +465,93 @@ export default {
         </button>
       </div>
     </header>
+
+    <!-- Phase 9: placement advisories — per-platform row under the status header.
+         Advisory forever: nothing here can block approval. -->
+    <div
+      v-if="placement && placement.findings.length"
+      class="flex flex-wrap items-center gap-2 border-b border-neutral-800 bg-neutral-900/40 px-4 py-1.5"
+    >
+      <span class="text-[11px] font-medium text-neutral-300">{{ placement.label }}</span>
+      <template v-for="finding in placement.findings" :key="finding.key">
+        <span
+          class="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]"
+          :class="
+            finding.decision
+              ? 'border-neutral-700 text-neutral-500 line-through decoration-neutral-600'
+              : 'border-warning/50 text-warning'
+          "
+          :title="finding.decision ? `${finding.decision} — advisory closed` : finding.detail"
+        >
+          {{ finding.detail }}
+          <template v-if="!finding.decision && can('comment')">
+            <button
+              type="button"
+              class="text-neutral-400 hover:text-neutral-100"
+              title="Noted — I'll deal with it"
+              @click="onDecidePlacement(finding.key, 'acknowledged')"
+            >
+              ✓
+            </button>
+            <button
+              type="button"
+              class="text-neutral-400 hover:text-neutral-100"
+              title="Waive — fine for this asset"
+              @click="onDecidePlacement(finding.key, 'waived')"
+            >
+              ✕
+            </button>
+          </template>
+        </span>
+      </template>
+      <button
+        type="button"
+        class="ml-auto rounded border border-neutral-700 px-2 py-0.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
+        :class="placementOverlay ? 'bg-neutral-800 text-neutral-100' : ''"
+        @click="placementOverlay = !placementOverlay"
+      >
+        {{ placement.label }} crop preview
+      </button>
+    </div>
+
+    <!-- The crop + safe-area at honest scale: what the platform keeps, what its UI covers. -->
+    <div
+      v-if="placementOverlay && placement && placement.crop"
+      class="border-b border-neutral-800 bg-neutral-900/40 px-4 py-3"
+    >
+      <div
+        class="relative mx-auto max-h-72 overflow-hidden rounded"
+        :style="{ aspectRatio: activeImage.image.width / activeImage.image.height, maxWidth: '24rem' }"
+      >
+        <img :src="activeImage.original_url" class="absolute inset-0 h-full w-full" />
+        <!-- everything the crop discards, dimmed -->
+        <div
+          class="absolute inset-0"
+          :style="{
+            background: 'rgba(0,0,0,0.65)',
+            clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+              ${(placement.crop.left / activeImage.image.width) * 100}% ${(placement.crop.top / activeImage.image.height) * 100}%,
+              ${(placement.crop.left / activeImage.image.width) * 100}% ${((placement.crop.top + placement.crop.height) / activeImage.image.height) * 100}%,
+              ${((placement.crop.left + placement.crop.width) / activeImage.image.width) * 100}% ${((placement.crop.top + placement.crop.height) / activeImage.image.height) * 100}%,
+              ${((placement.crop.left + placement.crop.width) / activeImage.image.width) * 100}% ${(placement.crop.top / activeImage.image.height) * 100}%,
+              ${(placement.crop.left / activeImage.image.width) * 100}% ${(placement.crop.top / activeImage.image.height) * 100}%)`,
+          }"
+        />
+        <!-- the platform's own UI zone: inside the crop but outside the safe area -->
+        <div
+          class="absolute border-2 border-dashed border-teal-300/80"
+          :style="{
+            left: `${(placement.safe.left / activeImage.image.width) * 100}%`,
+            top: `${(placement.safe.top / activeImage.image.height) * 100}%`,
+            width: `${(placement.safe.width / activeImage.image.width) * 100}%`,
+            height: `${(placement.safe.height / activeImage.image.height) * 100}%`,
+          }"
+        />
+      </div>
+      <p class="mt-1.5 text-center text-[10px] text-neutral-500">
+        dimmed = lost to the {{ placement.label }} crop · dashed = safe from the platform's own UI
+      </p>
+    </div>
 
     <div class="grid min-h-0 flex-1 lg:grid-cols-[1fr_23rem]">
       <!-- Canvas column: the image contain-fits — the rail is the only thing that scrolls -->
