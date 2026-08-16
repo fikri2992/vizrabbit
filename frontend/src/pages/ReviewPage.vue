@@ -56,6 +56,8 @@ export default {
       placementOverlay: false,
       voiceSession: null, // phase 14: an open Live session, or null
       voiceHidden: false, // a failed request hides the control silently
+      shown: null, // { src, width, height } — swapped only once decoded, so
+      // stepping between variants never flashes a half-loaded frame
       replyDrafts: {},
       tools: TOOLS,
       colors: COLORS,
@@ -149,6 +151,12 @@ export default {
     imageId() {
       this.load()
     },
+    activeImage: {
+      immediate: true,
+      handler() {
+        this.syncShown()
+      },
+    },
     // The agent finished while the user was drawing or reading — tell them
     // quietly; the pins have already appeared via the store refetch.
     agentWorking(now, before) {
@@ -216,6 +224,32 @@ export default {
       if (this.agentWorking) this.tab = 'activity'
       const first = this.railItems[0]
       if (first) this.select(first)
+    },
+
+    /**
+     * Swap what the canvas shows only after the next original has decoded:
+     * the old frame stays up during the (cached, fast) decode, so a variant
+     * switch is one clean replacement instead of a flash of blank.
+     */
+    async syncShown() {
+      const view = this.activeImage
+      if (!view || view.image.kind === 'video') return
+      const src = view.original_url
+      if (this.shown?.src === src) return
+      const probe = new Image()
+      probe.src = src
+      // decode() gives the cleanest swap but can stall forever in a hidden
+      // tab, and onload alone misses the decode. Race them, capped: whichever
+      // fires first wins, and 400ms of waiting is worse than one soft flash.
+      await new Promise((resolve) => {
+        probe.onload = resolve
+        probe.onerror = resolve
+        probe.decode?.().then(resolve, resolve)
+        setTimeout(resolve, 400)
+      })
+      if (this.activeImage?.original_url === src) {
+        this.shown = { src, width: view.image.width, height: view.image.height }
+      }
     },
 
     /**
@@ -698,10 +732,11 @@ export default {
       <div v-else class="flex min-h-0 flex-col gap-2 p-3">
         <div class="relative min-h-0 flex-1 overflow-hidden rounded-lg">
           <ReviewCanvas
+            v-if="shown"
             ref="canvas"
-            :src="activeImage.original_url"
-            :width="activeImage.image.width"
-            :height="activeImage.image.height"
+            :src="shown.src"
+            :width="shown.width"
+            :height="shown.height"
             :defects="defects"
             :threads="threads"
             :pending-shapes="pendingShapes"
