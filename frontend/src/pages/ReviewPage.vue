@@ -149,6 +149,9 @@ export default {
   },
   watch: {
     imageId() {
+      // A clean blank beats a stale frame: never keep another version's
+      // pixels up while this one loads.
+      this.shown = null
       this.load()
     },
     activeImage: {
@@ -233,7 +236,10 @@ export default {
      */
     async syncShown() {
       const view = this.activeImage
-      if (!view || view.image.kind === 'video') return
+      // The store remembers the previous visit's image; painting it here
+      // would show the wrong variant while the right one loads. Only ever
+      // show the image this route is about.
+      if (!view || view.image.id !== this.imageId || view.image.kind === 'video') return
       const src = view.original_url
       if (this.shown?.src === src) return
       const probe = new Image()
