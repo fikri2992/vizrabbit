@@ -49,6 +49,13 @@ export default {
   name: 'PrototypeSlotFlowPage',
   data() {
     return {
+      // On the instance, not module scope: a template cannot see module
+      // constants, and referencing one silently yields undefined — which is how
+      // every node ended up positioned at NaN and stacked in one pile.
+      NODE_W,
+      LANE_W,
+      ROW_H,
+      APPROVER,
       slot: seed(),
       model: 'perBranch',
       selected: 'a1a',
