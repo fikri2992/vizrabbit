@@ -84,6 +84,23 @@ export function flowNodes(slot) {
 }
 
 /**
+ * The default pair for compare mode (decision 25): each variant's newest work
+ * is its tip (a node nothing supersedes), and the first two tips are the pair
+ * the owner most likely means. One-variant slots compare a tip against its
+ * ancestor; a single-version slot has nothing to compare.
+ */
+export function comparePair(nodes) {
+  const tips = nodes.filter((node) => !nodes.some((n) => n.parent === node.id))
+  const [first, second] = tips
+  if (first && second) return [first.id, second.id]
+  if (first && nodes.length >= 2) {
+    const other = nodes.find((node) => node.id !== first.id)
+    return [other.id, first.id]
+  }
+  return null
+}
+
+/**
  * Why a variant is greyed out — never the word "rejected".
  *
  * Losing a pick and failing review are different fates, and a designer reading

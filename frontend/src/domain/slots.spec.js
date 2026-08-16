@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   archiveNote,
+  comparePair,
   flowNodes,
   isAgentVersion,
   groupingParam,
@@ -310,5 +311,29 @@ describe('stanceFor', () => {
     })
     // complete slot → null (approval already happened)
     expect(stanceFor(slot({ state: 'complete', variants: s.variants }))).toBeNull()
+  })
+})
+
+describe('comparePair', () => {
+  const node = (id, supersedes = null) =>
+    version({ image: { id, version: 1, supersedes_id: supersedes } })
+
+  it('defaults to the tips of the first two variants', () => {
+    const s = slot({
+      variants: [
+        variant(1, { versions: [node('a1'), node('a2', 'a1')] }),
+        variant(2, { versions: [node('b1')] }),
+      ],
+    })
+    expect(comparePair(flowNodes(s))).toEqual(['a2', 'b1'])
+  })
+
+  it('compares a lone variant tip against its ancestor', () => {
+    const s = slot({ variants: [variant(1, { versions: [node('a1'), node('a2', 'a1')] })] })
+    expect(comparePair(flowNodes(s))).toEqual(['a1', 'a2'])
+  })
+
+  it('has nothing to compare on a single-version slot', () => {
+    expect(comparePair(flowNodes(slot()))).toBeNull()
   })
 })

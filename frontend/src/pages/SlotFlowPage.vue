@@ -1,7 +1,8 @@
 <script>
 import { mapState } from 'pinia'
 
-import { flowNodes, isAgentVersion, slotPill, stanceFor, TONE_HEX, versionTone } from '@/domain/slots'
+import CompareView from '@/components/CompareView.vue'
+import { comparePair, flowNodes, isAgentVersion, slotPill, stanceFor, TONE_HEX, versionTone } from '@/domain/slots'
 import { shortDate } from '@/domain/time'
 import { useProjectsStore } from '@/stores/projects'
 import { useReviewStore } from '@/stores/review'
@@ -13,6 +14,7 @@ const ROW_H = 148
 
 export default {
   name: 'SlotFlowPage',
+  components: { CompareView },
   props: {
     projectId: { type: String, required: true },
     slotId: { type: String, required: true },
@@ -149,6 +151,13 @@ export default {
     },
     selectedNode() {
       return (this.selected && this.byId[this.selected]) || null
+    },
+    /** Compare needs a pair (decision 25); a single-version slot has none. */
+    comparable() {
+      return comparePair(this.nodes) !== null
+    },
+    comparing() {
+      return this.$route.query.compare === '1' && this.comparable
     },
     /** The agent's recommendation (decision 21): computed facts, never prose. */
     stance() {
@@ -424,6 +433,14 @@ export default {
 
       <div class="ml-auto flex items-center gap-1">
         <button
+          v-if="comparable"
+          type="button"
+          class="mr-1 rounded border border-neutral-600 px-2 py-0.5 text-xs text-neutral-200 hover:bg-edge"
+          @click="$router.replace({ query: { ...$route.query, compare: '1' } })"
+        >
+          Compare
+        </button>
+        <button
           type="button"
           class="rounded border border-neutral-600 px-2 py-0.5 text-xs text-neutral-200 hover:bg-edge"
           aria-label="Zoom out"
@@ -644,6 +661,14 @@ export default {
         </span>
       </div>
     </div>
+
+    <!-- compare mode (decision 25): looking, not judging -->
+    <CompareView
+      v-if="comparing"
+      :project-id="projectId"
+      :nodes="nodes"
+      @close="$router.replace({ query: { ...$route.query, compare: undefined, mode: undefined } })"
+    />
 
     <!-- ═══ version rail: what is selected, and what you can do to it ═══ -->
     <aside
