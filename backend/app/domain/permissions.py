@@ -36,6 +36,10 @@ class Permission(StrEnum):
     #: Turns an extracted palette into one the pipeline enforces. Owner-only because
     #: confirming it is what makes brand defects the Owner's to answer for.
     CONFIRM_BRAND_PROFILE = "confirm_brand_profile"
+    #: Animate an approved still into a motion variant (decision 24). Owner-only:
+    #: it spends real model budget and manufactures a deliverable from the
+    #: approved asset.
+    ANIMATE_APPROVED = "animate_approved"
     RENAME_PROJECT = "rename_project"
     #: Destroys the project and everything in it. The most consequential action here.
     DELETE_PROJECT = "delete_project"

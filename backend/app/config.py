@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     #   image editing ("nano banana"): drafts fixes for mechanical defects
     #   (decision 21). One call per image per run, aggregated instructions.
     model_image_edit: str = "gemini-2.5-flash-image"
+    #   video generation (Veo): animates an approved still into a motion
+    #   variant that re-enters review (decision 24). One call per animate
+    #   request, Owner-only.
+    model_video: str = "veo-3.0-generate-001"
+
+    # Veo runs as a long-running operation; these bound the polling loop.
+    animate_poll_seconds: float = 5.0
+    animate_timeout_seconds: float = 600.0
 
     # --- Pipeline caps (domain-model.md decisions 2, 5, 7) ----------------
     grid_cols: int = 8

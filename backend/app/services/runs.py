@@ -166,16 +166,21 @@ async def create_run(
     uploads: list[tuple[str, bytes]],
     group_into: str | None = None,
     placement: str = "",
+    author: str = "",
 ) -> Run:
     """Persist an upload batch and return the queued run.
 
     ``group_into`` is how the staging strip's one control reaches the domain:
     ``None`` gives every file its own slot (the default, and what pre-slot upload
-    did), ``"new"`` makes the batch the competing variants of one fresh slot, and
+    did), ``"new"`` makes the batch one fresh slot's competing variants, and
     a slot id appends the batch to that slot as further variants.
 
     ``placement`` is the intake question's answer (decision 22): where the batch
     will run. Recorded verbatim; the platform checker scopes itself by it.
+
+    ``author`` overrides who the assets say uploaded them — how generated media
+    signs itself as the agent (decision 24) while ``user`` stays the accountable
+    member whose permission started the run.
     """
     require(project, user.id, Permission.UPLOAD_IMAGES)
     if not uploads:
@@ -199,7 +204,7 @@ async def create_run(
             filename=filename,
             slot_id=slot_id,
             variant=variant,
-            uploaded_by=user.id,
+            uploaded_by=author or user.id,
         )
         if is_video(data):
             await _ingest_video(blobs, project.id, asset, data)

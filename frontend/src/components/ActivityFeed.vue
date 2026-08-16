@@ -29,11 +29,18 @@ const STAGE_TEXT = {
   // The judgment voice (decision 20): why the agent stayed quiet or asked.
   judgment: (d) => d.note,
   draft_created: (d) => `${d.filename}: ${d.note}`,
+  // Generated media (decision 24): Veo output re-entering through the front door.
+  animation_started: (d) => d.note,
+  animation_created: (d) => d.note,
+  animation_failed: (d) => d.note,
 }
 
 const STAGE_TONE = {
   judgment: 'text-teal-200/90',
   draft_created: 'text-teal-200/90',
+  animation_started: 'text-teal-200/90',
+  animation_created: 'text-teal-200/90',
+  animation_failed: 'text-red-400',
   image_failed: 'text-red-400',
   recheck_failed: 'text-red-400',
   run_finished: 'text-green-400',

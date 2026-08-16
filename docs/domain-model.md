@@ -104,6 +104,7 @@ Hackathon: All Things Agentic (Devpost). Deadline **2026-08-31 17:00 PDT**. Requ
 22. Placement is asked once at upload staging and scopes the checks (platform safe-areas, formats). One tap, skippable, remembered per slot.
 23. Video reviews as shots: scene-cut detection yields representative frames that run the existing image pipeline; defects anchor to time ranges (timestamps are the new pins) and render as markers on the player timeline. The measured half extends per modality — LUFS loudness, text reading-speed, platform safe-area overlap, flash limits — always arithmetic stated alongside the verdict, with passes reported too. Audio checks ship as a component of video first; standalone audio waits for demand.
 18. Guideline PDFs are rendered to page images, not just text-extracted, with a hard page budget. The colours worth catching are the ones printed as a swatch with no hex beside them, and those are invisible to a text reader.
+24. Generated media re-enters review through the front door. Animating an approved still (Veo) produces a new agent-authored variant of the same slot that ingests, reviews and approves exactly like an upload — the airlock applies to what the agent makes as much as to what people bring. Owner-only to start (it spends real model budget and manufactures a deliverable from the approved asset), and the result is never approved, exported or privileged by construction: it competes like any other variant.
 
 ## Open items
 

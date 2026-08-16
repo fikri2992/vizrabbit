@@ -8,8 +8,9 @@ export default {
     slot: { type: Object, required: true },
     canUpload: { type: Boolean, default: false },
     canDelete: { type: Boolean, default: false },
+    canAnimate: { type: Boolean, default: false },
   },
-  emits: ['add-variant', 'delete', 'rename', 'spec'],
+  emits: ['add-variant', 'delete', 'rename', 'spec', 'animate'],
   data() {
     return { menuOpen: false }
   },
@@ -30,6 +31,14 @@ export default {
     },
     hasHistory() {
       return this.hasVariants || this.slot.variants.some((variant) => variant.versions.length > 1)
+    },
+    /** Animatable: complete, and the winner is a still (decision 24). */
+    animatable() {
+      return (
+        this.canAnimate &&
+        this.slot.state === 'complete' &&
+        this.cover.image.kind !== 'video'
+      )
     },
     /** Marks worth a chip. Pickable is skipped — the state pill already says it. */
     chipMarks() {
@@ -109,7 +118,7 @@ export default {
       </RouterLink>
     </div>
 
-    <div v-if="canUpload || canDelete" class="absolute right-2 top-2">
+    <div v-if="canUpload || canDelete || canAnimate" class="absolute right-2 top-2">
       <button
         type="button"
         class="rounded-md bg-ink/80 px-2 py-0.5 text-sm text-neutral-300 opacity-0 backdrop-blur transition focus:opacity-100 group-hover:opacity-100 hover:text-white"
@@ -155,6 +164,14 @@ export default {
           @click.stop.prevent="$emit('spec', slot); menuOpen = false"
         >
           Set deliverables…
+        </button>
+        <button
+          v-if="animatable"
+          type="button"
+          class="block w-full px-3 py-1.5 text-left text-neutral-300 hover:bg-edge hover:text-white"
+          @click.stop.prevent="$emit('animate', slot); menuOpen = false"
+        >
+          Animate approved…
         </button>
         <button
           v-if="canDelete"

@@ -43,6 +43,11 @@ export default {
       specDue: '',
       specError: '',
       specBusy: false,
+      animating: null, // the slot whose approved still is being animated
+      animateBrief: '',
+      animatePlacement: '',
+      animateError: '',
+      animateBusy: false,
     }
   },
   computed: {
@@ -63,6 +68,9 @@ export default {
     },
     canConfirmBrand() {
       return useProjectsStore().can('confirm_brand_profile')
+    },
+    canAnimate() {
+      return useProjectsStore().can('animate_approved')
     },
     lastActivityLine() {
       const last = this.recentActivity[0]
@@ -101,7 +109,7 @@ export default {
   },
   methods: {
     ...mapActions(useReviewStore, ['startStream', 'stopStream']),
-    ...mapActions(useSlotsStore, ['fetchSlots', 'upload', 'addVariant', 'rename', 'setSpec', 'dismissMark']),
+    ...mapActions(useSlotsStore, ['fetchSlots', 'upload', 'addVariant', 'rename', 'setSpec', 'dismissMark', 'animate']),
 
     /** One line per mark: "Hero banner — missing 9:16". */
     markLine(mark) {
@@ -142,6 +150,32 @@ export default {
         this.specError = error.message
       } finally {
         this.specBusy = false
+      }
+    },
+
+    askAnimate(slot) {
+      this.animating = slot
+      this.animateBrief = ''
+      this.animatePlacement = ''
+      this.animateError = ''
+    },
+
+    async confirmAnimate() {
+      this.animateBusy = true
+      this.animateError = ''
+      try {
+        await this.animate(
+          this.projectId,
+          this.animating.slot_id,
+          this.animateBrief,
+          this.animatePlacement,
+        )
+        this.animating = null
+        this.tab = 'activity' // the result arrives through the feed
+      } catch (error) {
+        this.animateError = error.message
+      } finally {
+        this.animateBusy = false
       }
     },
 
@@ -403,9 +437,11 @@ export default {
           :slot="slot"
           :can-upload="canUpload"
           :can-delete="canDelete"
+          :can-animate="canAnimate"
           @add-variant="onAddVariant"
           @rename="askRename"
           @spec="askSpec"
+          @animate="askAnimate"
           @delete="askDelete"
         />
       </div>
@@ -524,6 +560,67 @@ export default {
             @click="confirmSpec"
           >
             {{ specBusy ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Animate (decision 24): the approved still becomes a motion candidate -->
+    <div
+      v-if="animating"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      @click.self="animating = null"
+    >
+      <div class="w-full max-w-sm rounded-xl border border-edge-strong bg-panel-2 p-5">
+        <h3 class="text-sm font-medium">Animate {{ animating.name }}</h3>
+        <p class="mt-1 text-xs leading-relaxed text-neutral-500">
+          Veo animates the approved still. The result lands as a new variant and goes
+          through review like anything else — nothing ships without your approval.
+        </p>
+        <label class="mt-3 block text-xs text-neutral-500">
+          Motion brief
+          <textarea
+            v-model="animateBrief"
+            rows="3"
+            placeholder="e.g. slow push-in on the product, steam rising, soft ambient light"
+            class="mt-1 w-full resize-none rounded-md border border-edge-strong bg-panel px-2.5 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-500"
+          />
+        </label>
+        <div class="mt-3">
+          <span class="text-xs text-neutral-500">Where will it run? (optional)</span>
+          <div class="mt-1.5 flex gap-1.5">
+            <button
+              v-for="platform in ['tiktok', 'instagram', 'web']"
+              :key="platform"
+              type="button"
+              class="rounded-full border px-2.5 py-1 text-xs capitalize transition"
+              :class="
+                animatePlacement === platform
+                  ? 'border-neutral-300 bg-neutral-50 font-medium text-neutral-900'
+                  : 'border-edge-strong text-neutral-300 hover:border-neutral-500'
+              "
+              @click="animatePlacement = animatePlacement === platform ? '' : platform"
+            >
+              {{ platform }}
+            </button>
+          </div>
+        </div>
+        <p v-if="animateError" class="mt-2 text-xs text-blocker">{{ animateError }}</p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-md border border-edge-strong px-3 py-1.5 text-xs text-neutral-300 hover:bg-edge"
+            @click="animating = null"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            :disabled="animateBusy || !animateBrief.trim()"
+            class="rounded-md bg-neutral-50 px-3 py-1.5 text-xs font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
+            @click="confirmAnimate"
+          >
+            {{ animateBusy ? 'Starting…' : 'Animate' }}
           </button>
         </div>
       </div>

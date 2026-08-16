@@ -483,6 +483,25 @@ Tasks:
   video never leaks into the export (test)
 - Browser demo: animate an approved still → watch the run → review the video
 
+**Landed 2026-08-16.** `agents/animator.py` (Veo long-running operation,
+`model_video` + poll caps in config), `services/animate.py` split sync/async:
+`resolve_animation` validates before any budget is spent (Owner-only via the
+new `ANIMATE_APPROVED` permission, completed slots only, non-empty brief),
+`run_animation` does the minutes-slow half in the background and reports
+through the feed (`animation_started/created/failed`). The output rides
+`create_run` with an `author` override — one parameter, and every downstream
+behaviour (video ingest, review pass, tree, export) is the existing code
+untouched. Also fixed the drafting pass exposed by this work: the editor now
+skips video assets (a PNG branch on a video would claim to fix footage).
+Gate evidence: 8 tests — owner-only, incomplete-slot refusal, failed
+generation leaves no orphan (event trail asserted), the generated clip lands
+as an ordinary agent variant with the full review pass and the approval
+unmoved, export exclusion, editor-never-drafts-on-video. Browser-verified:
+"Animate approved…" on the complete demo slot → brief modal → 202 → feed
+shows the start line and (credential-less) the honest failure line, slot
+unchanged. **The real Veo call has never run — needs credentials (Deferred
+evidence, same item as the editor smoke-run).**
+
 ## Sequencing note
 
 10 → 11 → 12 in order (each consumes the previous); 13 is parallel-safe.
@@ -523,8 +542,9 @@ each item names what the submission says without it.
   untested half of Gate 7. Without it, cite the mechanical recall 1.00 only.
 - **Brand extraction** (`scripts/check_brand_extraction.py` + a real brand
   PDF, needs credentials).
-- **Editor smoke-run** (needs credentials): one real nano-banana draft on the
-  seeded demo — `agents/editor.py` has never been exercised live.
+- **Editor + animator smoke-run** (needs credentials): one real nano-banana
+  draft and one real Veo animation on the seeded demo — `agents/editor.py`
+  and `agents/animator.py` have never been exercised live.
 - **Gate 3 leftovers**: 5 real fixed-image pairs (depends on the eval set);
   timed 5-minute demo-script run; memory-rule roundtrip on a planted image.
 - **Gate 4 re-verification**: current main is ~13 commits past the deployed

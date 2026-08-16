@@ -12,6 +12,7 @@ from app.domain.marks import marks_for, parse_aspect
 from app.domain.permissions import Permission
 from app.domain.slots import SlotGroup, SlotState, slot_state
 from app.infra import repository as repo
+from app.services import animate as animate_service
 from app.services import runs as run_service
 from app.services import slots as slot_service
 
@@ -241,6 +242,52 @@ async def add_variant(
             run_service.review_one, store, blobs, bus, project, run, asset.id
         )
     return asset
+
+
+class AnimateRequest(BaseModel):
+    brief: str
+    placement: str = ""
+
+
+@router.post("/{slot_id}/animate", status_code=202)
+async def animate_slot(
+    slot_id: str,
+    body: AnimateRequest,
+    project: ProjectDep,
+    store: StoreDep,
+    blobs: BlobsDep,
+    bus: BusDep,
+    user: UserDep,
+    background: BackgroundTasks,
+) -> dict[str, str]:
+    """Animate the approved still into a motion variant (decision 24).
+
+    Validates now, generates later: Veo is minutes-slow, so the call returns
+    202 and the rest arrives through the activity feed like any other run.
+    """
+    guard(project, user, Permission.ANIMATE_APPROVED)
+    try:
+        approved = await animate_service.resolve_animation(
+            store, project, user, slot_id, body.brief
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    background.add_task(
+        animate_service.run_animation,
+        store,
+        blobs,
+        bus,
+        project,
+        user,
+        slot_id,
+        approved,
+        body.brief,
+        body.placement,
+    )
+    return {"status": "accepted", "from_image_id": approved.id}
 
 
 @router.get("/{slot_id}/delete_preview")

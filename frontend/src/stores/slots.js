@@ -133,6 +133,15 @@ export const useSlotsStore = defineStore('slots', {
       }))
     },
 
+    /** Animate the approved still into a motion variant (decision 24). 202 —
+     *  the result arrives through the activity feed like any other run. */
+    async animate(projectId, slotId, brief, placement = '') {
+      return api.post(`/api/projects/${projectId}/slots/${slotId}/animate`, {
+        brief,
+        placement,
+      })
+    },
+
     async deletePreview(projectId, slotId) {
       return api.get(`/api/projects/${projectId}/slots/${slotId}/delete_preview`)
     },

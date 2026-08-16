@@ -65,6 +65,10 @@ async def _draft_one(
     original = await repo.load(store, ImageAsset, image_id)
     if original is None or original.status is not ImageStatus.DONE:
         return None
+    if original.kind == "video":
+        # The editor edits stills; a PNG branch on a video would claim to fix
+        # defects that live in footage. Re-cuts stay human (decision 23).
+        return None
 
     if original.slot_id:
         slot = await repo.load(store, Slot, original.slot_id)
