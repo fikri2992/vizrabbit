@@ -26,8 +26,8 @@ Tasks:
 - [x] Agents: Scanner → Inspector → Annotator (verify loop ≤3) → Pro gate (≤3 calls/run); Orchestrator with batch fan-out, concurrency 3
 - [x] Built-in AI-slop guideline text (`ANAT-*`, `PHYS-*`, `ARTF-*` rule ids)
 - [x] Benchmark harness: naive single-prompt baseline vs pipeline; recall/precision/F1 table + explicit Gate 1 verdict, exits non-zero on failure
-- [ ] Eval set: 30 labeled images (≥20 with known defects, ≥10 clean) — **needs images + API key**
-- [ ] First benchmark run — **blocked on the eval set**
+- [→] Eval set: 30 labeled images (≥20 with known defects, ≥10 clean) — **moved to Deferred evidence (2026-08-16)**
+- [→] Full benchmark run — same move; the 10-image first run below stands as the interim record
 
 **Gate 1 (quantified):**
 - [x] Unit tests: every cell→pixel mapping exact on 1:1, 4:5 and 16:9; cells tile the image with no gaps or overlaps; edge-cell margin clamping covered for every cell
@@ -52,6 +52,11 @@ Tasks:
 2. **The recall lift is underpowered.** With 12 labelled defects, one defect is worth 8.3 recall points — so "+8.3" means the pipeline found exactly one more defect than the baseline. A 10-point threshold cannot be resolved at this sample size.
 
 **To make Gate 1 decidable**: label the remaining 14 defective images, and label them *exhaustively* rather than just the obvious defect. At ≥40 defects one defect is worth under 2.5 points, and precision becomes a real measurement.
+
+**Deferred 2026-08-16**: the labelling work and re-run move to the Deferred
+evidence section at the end of this plan. Building phases no longer wait on
+Gate 1; the interim numbers above are what the submission cites unless the
+deferred run happens first.
 
 ## Phase 2 — Product spine (Aug 20–23)
 
@@ -278,6 +283,12 @@ Tasks:
   originals — no annotated files, no superseded versions, unique filenames
 - Browser-verified: approve → count increments → downloaded zip opens
 
+**Landed 2026-08-16.** `services/export.py` (`approved_assets` + `build_zip`)
+and `GET /projects/{id}/export/approved`. Gate evidence: integration test
+asserts the zip holds exactly the winners' latest approved clean originals with
+unique `{slot}-v{n}.png` names and 404s when nothing is approved;
+browser-verified "Download approved (N)" button with a live count.
+
 ## Phase 9 — Platform context checker (Aug 23–25) — riskiest, cuttable
 
 Placement findings are advisory, belong to an (image, platform) pair, and
@@ -300,6 +311,18 @@ Tasks:
   states (test), and placement findings never block image approval
 - Demo shows at least one platform end-to-end; degrading to one platform is
   the planned cut, not a failure
+
+**Landed 2026-08-16 — with the planned cut taken.** `domain/platforms.py`
+(tiktok/instagram/web presets, centre-crop geometry, crop-loss + resolution +
+loudness checks, all pure), findings derived at read time from the run's
+placement, acknowledge/waive stored as `PlacementDecision`. The legibility
+check (the ≥ 0.9 eval, the only model-call item) is the cut: v1 is entirely
+mechanical, zero model calls. Gate evidence: geometry unit tests; lifecycle
+isolation asserted (`PlacementFinding` has no path into `DefectState`, and an
+image with open advisories approves); browser-verified TikTok chips, crop
+preview overlay with safe-area box, and acknowledge/waive strike-through.
+Deviation from the task list: placement is chosen per-upload on the staging
+strip (decision 22), not a project-level setting.
 
 # Partner phases (2026-08-16) — from docs/product-thesis.md + the partner prototype
 
@@ -324,6 +347,12 @@ Tasks:
 project renders byte-identical card data to today (regression); dismissing a
 mark survives reload; placement lands on the run document.
 
+**Landed 2026-08-16.** `domain/marks.py` pure (21 table-driven tests);
+`Slot.spec`/`due_at`; marks computed in the slots endpoint per read, only
+`MarkDismissal` stored per user; SlotCard chips + dismissible quiet line;
+placement chips on the staging strip land on `Run.placement`. Spec-less
+regression and reload-survival asserted.
+
 ## Phase 11 — Draft-as-branch + stance (the partner's heart)
 
 Tasks:
@@ -342,6 +371,16 @@ every existing read path (chains/state/approval tests pass unchanged); the
 recheck runs on the draft like any fix; cost cap: ≤ 1 edit call per defect,
 one pass per run.
 
+**Landed 2026-08-16.** `services/drafts.py` (`draft_pass` after
+`run_finished`, whitelist = ANATOMY/ARTIFACT, one editor call per image,
+branch version authored `agent:qa`, recheck fires on it); `agents/editor.py`
+wraps `settings.model_image_edit` (nano banana). Discard reopens claimed
+defects, deletes the branch, sets `no_drafts`. Dashed draft node + stance
+panel (computed facts only) in the flow view. Gate evidence: whitelist
+boundary, read-path indistinguishability, and never-raises all tested.
+**Caveat: the real image-edit call has never run — needs credentials
+(Deferred evidence).**
+
 ## Phase 12 — Questions + judgment voice
 
 Tasks:
@@ -354,6 +393,14 @@ Tasks:
 **Gate 12:** answering a colour question adjusts the stored tolerance and a
 re-run stops asking; an ignored question never blocks approval flow (test);
 feed renders old events unchanged (compatibility).
+
+**Landed 2026-08-16.** Question threads with evidence at size (swatch pair
+parsed back out of the code-stamped measurement via `parse_measurement`, the
+exact inverse of `describe()`); "It's real" reopens, "Not a problem" dismisses
+and widens `PaletteEntry.tolerance` to the measured ΔE; `judgment` feed events
+via `judgment_notes`. Gate evidence: tolerance-widening round-trip, approval
+never blocked by an open question (backend gate counts OPEN only, frontend
+`isClear` mirrors it), feed compatibility.
 
 ## Phase 13 — Video review (biggest lift, independent of 10–12)
 
@@ -369,28 +416,118 @@ Tasks:
 range (integration); timeline markers seek; loudness numbers match ffmpeg's
 own report on a reference file; image-only projects untouched (regression).
 
+**Landed 2026-08-16 — narrower than the task list, deliberately.**
+`imaging/video.py` (probe, scene cuts capped at 12 frames, frame extraction,
+EBU R128 loudness); mp4 ingest stamps poster-as-original so every image
+surface works unchanged; review = one image-pipeline pass per shot frame with
+pins renumbered and defects stamped with shot time ranges; review page grows a
+player + seekable amber timeline + loudness advisory against the platform
+target (via Phase 9's placement strip, so safe-area is an advisory there, not
+a defect — decision 23's "measured half per modality"). Not built: audio
+extraction beyond loudness, text reading-speed. Re-cuts are new uploads;
+uploads capped at 20MB. Gate evidence: real-ffmpeg tests on a generated
+two-shot clip including loudness-matches-ffmpeg's-own-report and
+shot-time-range integration; image-ingest regression; browser-verified player,
+seek chips, and the measured-LUFS advisory. **ffmpeg must be added to the
+Cloud Run container before the next deploy.**
+
+# Bonus phases (2026-08-16) — the remaining Gemini-family tie-ins
+
+Phases 10–13 landed same-day, so the two bonus integrations the sequencing
+note only gestured at get real phases. Both are garnish per the thesis: they
+attach to existing surfaces and change no domain law. Either can be cut alone.
+
+## Phase 14 — Gemini Live on question threads
+
+Voice as an *input mode* for Phase 12's questions — the owner talks through
+the queued questions instead of clicking, answers write through the exact
+same `answer_question` path. No new decision authority, no new state.
+
+Tasks:
+- Backend: session-token endpoint for the Live API (`model_live` pinned in
+  `config.py`); tool declarations exposing only `answer_question` and
+  navigation (next/previous question) — the model can never approve, dismiss
+  a non-question defect, or touch anything else
+- Review page: a "talk through questions" toggle on the question banner;
+  transcript rendered into the thread as ordinary comments so the record is
+  the same as a clicked answer
+- Guard: works only when ≥ 1 question is open; degrades to the buttons
+  silently when the Live API or mic is unavailable
+
+**Gate 14 (quantified):**
+- Tool-call surface asserted: the declared tools cannot reach any transition
+  except the two question answers (test on the declaration list)
+- A spoken "not a problem" produces the identical stored outcome (dismissal +
+  tolerance widening) as the button — byte-equal defect record, asserted
+- Browser demo: answer 2 seeded questions by voice end-to-end
+
+## Phase 15 — Veo export extension
+
+From Phase 8's dead-end-closer: an approved still can be extended into a
+short motion variant, and the output *re-enters review* as a new video slot
+variant — the airlock applies to generated media exactly as to uploads.
+
+Tasks:
+- `POST /projects/{id}/slots/{slot_id}/animate`: Veo call
+  (`model_video` pinned in `config.py`) from the approved original + a typed
+  motion brief; result ingests through `_ingest_video` as a new variant of
+  the same slot (agent-authored, like a draft)
+- Button on the completed slot card ("Animate…"), brief modal; Owner-only
+- The generated variant gets the full video review pass (Phase 13) —
+  loudness, shots, placement advisories if the run has a placement
+
+**Gate 15 (quantified):**
+- Output lands as an ordinary video variant: every existing read path (tree,
+  review, export) renders it with zero special cases (tests pass unchanged)
+- Export zip still contains only *approved* assets — an unapproved generated
+  video never leaks into the export (test)
+- Browser demo: animate an approved still → watch the run → review the video
+
 ## Sequencing note
 
 10 → 11 → 12 in order (each consumes the previous); 13 is parallel-safe.
 Hackathon bonus tie-ins: Phase 11 is the nano-banana integration; Gemini Live
-attaches to Phase 12's question threads (voice as an input mode, garnish per
-the thesis); Veo enters as a Phase 8 export extension whose output re-enters
-review.
+is Phase 14; Veo is Phase 15. With 11 + 14 + 15 that is three bonus models
+beyond the core Gemini pipeline — the maximum bonus.
 
-## Revised calendar
+## Revised calendar (2026-08-16, second revision)
 
-- Aug 16–19 Phase 6 · Aug 20–22 Phase 7 · Aug 22 Phase 8 · Aug 23–25 Phase 9
-- Phases 10–13 slot into Aug 20–28 alongside 7–9 as capacity allows, in cut
-  order below; hardening + outstanding Gate 1/3/4 evidence (exhaustive labels,
-  benchmark re-run, 5 real fix pairs, cost/image, fresh-clone README timing)
-  stays Aug 26–28
-- Aug 29–31 Phase 5 submission (video, Devpost, ≥ 24h early) — protected
+Phases 6–13 all landed by Aug 16 — two weeks ahead of the first revision.
+What remains:
 
-## Cut order (revised)
+- Aug 17–21: Phase 14 (Live) · Phase 15 (Veo) · credential-gated checks from
+  Deferred evidence (palette pipeline eval, brand extraction, editor
+  smoke-run)
+- Aug 22–26: redeploy (ffmpeg in the container) + Gate 4 re-verification
+  against the hosted URL; hardening; deferred evidence as capacity allows
+- Aug 27–31: Phase 5 submission (video, Devpost, ≥ 24h early) — protected,
+  starts no later than Aug 27 regardless of what is unfinished
 
-1. Phase 13 video → 2. Platform checker (Phase 9) → 3. Phase 12 questions →
-4. History-tree polish (fall back to grouped cards per slot) → 5. Memory
-collision-grilling → 6. Mentions/notifications. Phase 10 and 11 are not cut
-once started — they are the demo's spine. Never cut: pipeline, benchmark,
-review screen, re-check lifecycle, slot remodel, brand palette, deploy,
-demo video.
+## Cut order (second revision)
+
+1. Deferred evidence (already deferred) → 2. Phase 15 Veo → 3. Phase 14 Live.
+Never cut: everything already landed, redeploy + Gate 4 re-check, demo video,
+submission.
+
+# Deferred evidence (2026-08-16)
+
+Work that proves quality but blocks no build. Do before submission if time;
+each item names what the submission says without it.
+
+- **Gate 1 eval set** (deferred by decision, was Phase 1): label remaining 14
+  defective images exhaustively (≥ 40 defects total), re-run benchmark,
+  measure cost/image. Without it the submission cites the 10-image interim
+  table with its stated caveats.
+- **Palette full-pipeline eval** (`uv run python -m scripts.check_palette_eval`,
+  needs credentials): the Inspector's 10/10 photographic-blob rejection is the
+  untested half of Gate 7. Without it, cite the mechanical recall 1.00 only.
+- **Brand extraction** (`scripts/check_brand_extraction.py` + a real brand
+  PDF, needs credentials).
+- **Editor smoke-run** (needs credentials): one real nano-banana draft on the
+  seeded demo — `agents/editor.py` has never been exercised live.
+- **Gate 3 leftovers**: 5 real fixed-image pairs (depends on the eval set);
+  timed 5-minute demo-script run; memory-rule roundtrip on a planted image.
+- **Gate 4 re-verification**: current main is ~13 commits past the deployed
+  revision; redeploy (container needs ffmpeg) then re-run the clean-incognito
+  script, cold-start timing, mid-run kill recovery, fresh-clone README ≤ 15
+  min.
