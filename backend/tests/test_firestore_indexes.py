@@ -84,6 +84,7 @@ async def exercise_every_repository_query(store: RecordingStore) -> None:
     await repo.active_guidelines(store, "p1")
     await repo.active_memory_rules(store, "p1")
     await repo.unread_notifications(store, "u1")
+    await repo.dismissed_mark_keys(store, "p1", "u1")
 
     # The reads the project cascade and the brand profile do directly.
     for model in (Run, Guideline, MemoryRule, BrandProfile, Notification):

@@ -65,6 +65,7 @@ async def start_run(
     background: BackgroundTasks,
     files: list[UploadFile],
     group_into: str | None = Form(default=None),
+    placement: str | None = Form(default=None),
 ) -> Run:
     """Accept a batch and start processing it. Returns immediately; watch /events.
 
@@ -86,7 +87,9 @@ async def start_run(
         uploads.append((upload.filename or "upload.png", data))
 
     try:
-        run = await run_service.create_run(store, blobs, project, user, uploads, group_into)
+        run = await run_service.create_run(
+            store, blobs, project, user, uploads, group_into, placement=placement or ""
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     background.add_task(run_service.execute_run, store, blobs, bus, project, run)

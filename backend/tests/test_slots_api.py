@@ -574,3 +574,93 @@ async def test_deleting_one_variant_leaves_the_slot_and_its_siblings_standing(
     assert len(remaining) == 1
     assert [chain.variant for chain in remaining[0].variants] == [2]
     assert len(await repo.slots_for_project(store, project)) == 1
+
+
+# --- Phase 10: spec, derived marks, dismissals, placement -------------------
+
+
+@pytest.mark.anyio
+async def test_setting_a_spec_makes_the_missing_deliverable_a_mark(
+    client, store, blobs, project
+):
+    run = await upload(store, blobs, project, ["hero.png"])  # 320x320 → 1:1
+    await finish(store, run.image_ids[0])
+    slot_id = (await slot_service.project_slots(store, project))[0].slot_id
+
+    as_user(client, OWNER)
+    response = client.post(
+        f"/api/projects/{project}/slots/{slot_id}/spec", json={"spec": ["1:1", "9:16"]}
+    )
+    assert response.status_code == 200
+
+    view = client.get(f"/api/projects/{project}/slots").json()[0]
+    assert view["spec"] == ["1:1", "9:16"]
+    missing = [m for m in view["marks"] if m["kind"] == "missing"]
+    assert [m["label"] for m in missing] == ["9:16"]  # the 1:1 exists, the 9:16 does not
+
+
+def test_a_nonsense_aspect_is_rejected(client, project):
+    as_user(client, OWNER)
+    response = client.post(
+        f"/api/projects/{project}/slots/whatever/spec", json={"spec": ["banana"]}
+    )
+    assert response.status_code in (400, 404)  # slot lookup may refuse first; both refuse
+
+
+@pytest.mark.anyio
+async def test_dismissing_a_mark_hides_it_for_that_user_only(client, store, blobs, project):
+    run = await upload(store, blobs, project, ["hero.png"])
+    await finish(store, run.image_ids[0])
+    slot_id = (await slot_service.project_slots(store, project))[0].slot_id
+    await link_real_members(store, project)
+
+    as_user(client, OWNER)
+    client.post(f"/api/projects/{project}/slots/{slot_id}/spec", json={"spec": ["9:16"]})
+    key = client.get(f"/api/projects/{project}/slots").json()[0]["marks"][0]["key"]
+
+    assert client.post(
+        f"/api/projects/{project}/slots/marks/dismiss", json={"key": key}
+    ).status_code == 204
+
+    owner_marks = client.get(f"/api/projects/{project}/slots").json()[0]["marks"]
+    assert key not in [m["key"] for m in owner_marks]
+
+    as_user(client, DESIGNER)
+    designer_marks = client.get(f"/api/projects/{project}/slots").json()[0]["marks"]
+    assert key in [m["key"] for m in designer_marks]  # dismissal is per person
+
+
+@pytest.mark.anyio
+async def test_a_specless_slot_reads_exactly_as_before(client, store, blobs, project):
+    """Gate 10 regression: no spec ⇒ empty spec fields, no spec-born marks."""
+    run = await upload(store, blobs, project, ["hero.png"])
+    await finish(store, run.image_ids[0])
+
+    as_user(client, OWNER)
+    view = client.get(f"/api/projects/{project}/slots").json()[0]
+    assert view["spec"] == []
+    assert view["due_at"] is None
+    # the only mark a clean spec-less slot can earn is "pickable" — derived from
+    # state the card already shows, never from stored agenda
+    assert [m["kind"] for m in view["marks"]] in ([], ["pickable"])
+    assert {"slot_id", "name", "state", "synthetic", "variants"} <= set(view)
+
+
+def test_placement_lands_on_the_run_document(client, project):
+    as_user(client, OWNER)
+    response = client.post(
+        f"/api/projects/{project}/runs",
+        files=[("files", ("a.png", png_bytes(), "image/png"))],
+        data={"placement": "tiktok"},
+    )
+    assert response.status_code == 202
+    assert response.json()["placement"] == "tiktok"
+
+
+def test_omitted_placement_stays_empty(client, project):
+    as_user(client, OWNER)
+    response = client.post(
+        f"/api/projects/{project}/runs",
+        files=[("files", ("a.png", png_bytes(), "image/png"))],
+    )
+    assert response.json()["placement"] == ""

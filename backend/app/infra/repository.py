@@ -17,6 +17,7 @@ from app.domain.entities import (
     DismissalRecord,
     Guideline,
     ImageAsset,
+    MarkDismissal,
     MemoryRule,
     Notification,
     Project,
@@ -43,6 +44,7 @@ COLLECTIONS: dict[type[BaseModel], str] = {
     Comment: "comments",
     Notification: "notifications",
     ReviewThread: "threads",
+    MarkDismissal: "mark_dismissals",
 }
 
 
@@ -138,6 +140,12 @@ async def images_for_slot(store: Store, slot_id: str) -> list[ImageAsset]:
 async def slots_for_project(store: Store, project_id: str) -> list[Slot]:
     found = await find(store, Slot, where={"project_id": project_id})
     return sorted(found, key=lambda slot: slot.created_at)
+
+
+async def dismissed_mark_keys(store: Store, project_id: str, user_id: str) -> set[str]:
+    """Marks this user has waved away. No order_by — a set needs no index."""
+    found = await find(store, MarkDismissal, where={"project_id": project_id, "user_id": user_id})
+    return {dismissal.key for dismissal in found}
 
 
 async def defects_for_image(store: Store, image_id: str) -> list[DefectRecord]:

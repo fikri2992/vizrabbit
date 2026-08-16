@@ -14,7 +14,7 @@ export default {
   },
   emits: ['confirm', 'cancel'],
   data() {
-    return { grouped: false, previews: [] }
+    return { grouped: false, placement: '', previews: [] }
   },
   computed: {
     summary() {
@@ -61,11 +61,33 @@ export default {
           type="button"
           :disabled="busy"
           class="rounded-md bg-neutral-50 px-3 py-1 text-[11px] font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
-          @click="$emit('confirm', { grouped })"
+          @click="$emit('confirm', { grouped, placement })"
         >
           {{ busy ? 'Uploading…' : 'Start review' }}
         </button>
       </div>
+    </div>
+
+    <!-- Intake question (decision 22): offered, never required — like grouping. -->
+    <div class="mt-2 flex flex-wrap items-center gap-1.5 border-t border-edge pt-2">
+      <span class="text-[11px] text-neutral-500">Where will these run?</span>
+      <button
+        v-for="where in ['tiktok', 'instagram', 'web']"
+        :key="where"
+        type="button"
+        class="rounded-full px-2 py-0.5 text-[10px] capitalize transition"
+        :class="
+          placement === where
+            ? 'bg-neutral-50 font-medium text-neutral-900'
+            : 'border border-edge-strong text-neutral-400 hover:border-neutral-500 hover:text-neutral-200'
+        "
+        @click="placement = placement === where ? '' : where"
+      >
+        {{ where }}
+      </button>
+      <span class="text-[10px] text-neutral-600">
+        {{ placement === 'tiktok' ? 'safe-area checks will watch the caption zone' : 'optional — it scopes the platform checks' }}
+      </span>
     </div>
 
     <div class="mt-2.5 flex gap-2 overflow-x-auto pb-1">

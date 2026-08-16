@@ -38,6 +38,11 @@ export default {
       renaming: null,
       renameValue: '',
       renameError: '',
+      speccing: null, // the slot whose deliverables are being set
+      specValue: [],
+      specDue: '',
+      specError: '',
+      specBusy: false,
     }
   },
   computed: {
@@ -63,6 +68,12 @@ export default {
       const last = this.recentActivity[0]
       return last ? `${last.stage.replaceAll('_', ' ')}${last.detail ? ` — ${last.detail}` : ''}` : ''
     },
+    /** The quiet line's content: every slot's marks, each with its slot name. */
+    allMarks() {
+      return this.slots.flatMap((slot) =>
+        (slot.marks || []).map((mark) => ({ ...mark, slotName: slot.name, slotId: slot.slot_id })),
+      )
+    },
   },
   watch: {
     /** The agent finishing changes what the cards say, so resync the slot list. */
@@ -86,7 +97,49 @@ export default {
   },
   methods: {
     ...mapActions(useReviewStore, ['startStream', 'stopStream']),
-    ...mapActions(useSlotsStore, ['fetchSlots', 'upload', 'addVariant', 'rename']),
+    ...mapActions(useSlotsStore, ['fetchSlots', 'upload', 'addVariant', 'rename', 'setSpec', 'dismissMark']),
+
+    /** One line per mark: "Hero banner — missing 9:16". */
+    markLine(mark) {
+      const what = {
+        missing: `missing ${mark.label}`,
+        stalled: `stalled ${mark.label}`,
+        question: `${mark.label} question${mark.label === '1' ? '' : 's'}`,
+        pickable: 'ready to pick',
+      }[mark.kind]
+      return `${mark.slotName} — ${what}`
+    },
+
+    askSpec(slot) {
+      this.speccing = slot
+      this.specValue = [...(slot.spec || [])]
+      this.specDue = slot.due_at ? slot.due_at.slice(0, 10) : ''
+      this.specError = ''
+    },
+
+    toggleSpecAspect(aspect) {
+      this.specValue = this.specValue.includes(aspect)
+        ? this.specValue.filter((entry) => entry !== aspect)
+        : [...this.specValue, aspect]
+    },
+
+    async confirmSpec() {
+      this.specBusy = true
+      this.specError = ''
+      try {
+        await this.setSpec(
+          this.projectId,
+          this.speccing.slot_id,
+          this.specValue,
+          this.specDue ? new Date(`${this.specDue}T00:00:00Z`).toISOString() : null,
+        )
+        this.speccing = null
+      } catch (error) {
+        this.specError = error.message
+      } finally {
+        this.specBusy = false
+      }
+    },
 
     /** Picking files opens the staging strip; nothing uploads until it is confirmed. */
     onFiles(fileList) {
@@ -99,12 +152,12 @@ export default {
       this.onFiles(event.dataTransfer.files)
     },
 
-    async confirmUpload({ grouped }) {
+    async confirmUpload({ grouped, placement }) {
       const files = this.staged
       this.staged = []
       let run
       try {
-        run = await this.upload(this.projectId, files, { grouped })
+        run = await this.upload(this.projectId, files, { grouped, placement })
       } catch {
         // Put the strip back rather than making them re-pick the files; the
         // store has already put the reason on screen.
@@ -248,6 +301,43 @@ export default {
         @cancel="staged = []"
       />
 
+      <!-- The quiet line (decision 20): one dismissible mark summary, never a memo. -->
+      <div
+        v-if="allMarks.length"
+        class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-edge px-3 py-2"
+      >
+        <span
+          v-for="mark in allMarks.slice(0, 4)"
+          :key="mark.key"
+          class="group/mark flex items-center gap-1 text-xs"
+          :class="{
+            'text-warning': mark.kind === 'missing',
+            'text-blocker': mark.kind === 'stalled',
+            'text-neutral-300': mark.kind === 'question',
+            'text-teal-200': mark.kind === 'pickable',
+          }"
+          :title="mark.detail"
+        >
+          <RouterLink
+            :to="{ name: 'slot-flow', params: { projectId, slotId: mark.slotId } }"
+            class="hover:underline"
+          >
+            {{ markLine(mark) }}
+          </RouterLink>
+          <button
+            type="button"
+            class="text-neutral-600 opacity-0 transition group-hover/mark:opacity-100 hover:text-neutral-300"
+            :aria-label="`Dismiss ${markLine(mark)}`"
+            @click="dismissMark(projectId, mark.key)"
+          >
+            ✕
+          </button>
+        </span>
+        <span v-if="allMarks.length > 4" class="text-xs text-neutral-500">
+          +{{ allMarks.length - 4 }} more on the cards
+        </span>
+      </div>
+
       <div
         v-if="running"
         class="mb-4 flex items-center gap-2.5 rounded-md border border-edge px-3 py-2"
@@ -302,6 +392,7 @@ export default {
           :can-delete="canDelete"
           @add-variant="onAddVariant"
           @rename="askRename"
+          @spec="askSpec"
           @delete="askDelete"
         />
       </div>
@@ -364,6 +455,62 @@ export default {
             @click="confirmDelete"
           >
             {{ deleteBusy ? 'Deleting…' : 'Delete slot' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spec: the definition of done — what makes "missing" computable -->
+    <div
+      v-if="speccing"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      @click.self="speccing = null"
+    >
+      <div class="w-full max-w-sm rounded-xl border border-edge-strong bg-panel-2 p-5">
+        <h3 class="text-sm font-medium">Deliverables for {{ speccing.name }}</h3>
+        <p class="mt-1 text-xs text-neutral-500">
+          The set this slot ships as. Once set, the agent can say what's missing.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <button
+            v-for="aspect in ['16:9', '1:1', '9:16', '4:5', '21:9']"
+            :key="aspect"
+            type="button"
+            class="rounded-full border px-2.5 py-1 text-xs transition"
+            :class="
+              specValue.includes(aspect)
+                ? 'border-neutral-300 bg-neutral-50 font-medium text-neutral-900'
+                : 'border-edge-strong text-neutral-300 hover:border-neutral-500'
+            "
+            @click="toggleSpecAspect(aspect)"
+          >
+            {{ aspect }}
+          </button>
+        </div>
+        <label class="mt-3 block text-xs text-neutral-500">
+          Due date (optional)
+          <input
+            v-model="specDue"
+            type="date"
+            class="mt-1 w-full rounded-md border border-edge-strong bg-panel px-2.5 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-500"
+          />
+        </label>
+        <p v-if="specError" class="mt-2 text-xs text-blocker">{{ specError }}</p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-md border border-edge-strong px-3 py-1.5 text-xs text-neutral-300 hover:bg-edge"
+            @click="speccing = null"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            :disabled="specBusy"
+            class="rounded-md bg-neutral-50 px-3 py-1.5 text-xs font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
+            @click="confirmSpec"
+          >
+            {{ specBusy ? 'Saving…' : 'Save' }}
           </button>
         </div>
       </div>

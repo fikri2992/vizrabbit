@@ -1,10 +1,14 @@
 """Slots: the project's work list, and the history tree behind each card."""
 
+from datetime import datetime
+from uuid import uuid4
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.api.deps import BlobsDep, BusDep, ProjectDep, StoreDep, UserDep, guard
-from app.domain.entities import ImageAsset, Project, Run, Slot
+from app.domain.entities import ImageAsset, MarkDismissal, Project, Run, Slot, now
+from app.domain.marks import marks_for, parse_aspect
 from app.domain.permissions import Permission
 from app.domain.slots import SlotGroup, SlotState, slot_state
 from app.infra import repository as repo
@@ -35,12 +39,24 @@ class VariantView(BaseModel):
     approved_by_name: str = ""
 
 
+class MarkView(BaseModel):
+    kind: str
+    label: str
+    detail: str
+    key: str
+
+
 class SlotView(BaseModel):
     slot_id: str
     name: str
     state: SlotState
     #: True while this slot exists only as a read-time wrapper around legacy data.
     synthetic: bool
+    #: The definition of done, empty unless someone set one (decision 19 glossary).
+    spec: list[str] = []
+    due_at: datetime | None = None
+    #: Derived attention marks (decision 20), already filtered by this user's dismissals.
+    marks: list[MarkView] = []
     variants: list[VariantView]
 
 
@@ -87,17 +103,90 @@ async def _view(
 
 
 @router.get("")
-async def list_slots(project: ProjectDep, store: StoreDep, blobs: BlobsDep) -> list[SlotView]:
-    """The project's work list. Legacy images appear as one-variant slots."""
+async def list_slots(
+    project: ProjectDep, store: StoreDep, blobs: BlobsDep, user: UserDep
+) -> list[SlotView]:
+    """The project's work list. Legacy images appear as one-variant slots.
+
+    Marks are computed here on every read (decision 20) and filtered by the
+    reading user's dismissals — nothing about them is ever stored.
+    """
     groups = await slot_service.project_slots(store, project.id)
-    counts = await slot_service.open_defect_counts(store, groups)
-    names = {slot.id: slot.name for slot in await repo.slots_for_project(store, project.id)}
-    return [
-        await _view(
-            store, blobs, project, group, names.get(group.slot_id) or _fallback_name(group), counts
+    signals = await slot_service.defect_signals(store, groups)
+    counts = {image_id: signal.open_count for image_id, signal in signals.items()}
+    stored = {slot.id: slot for slot in await repo.slots_for_project(store, project.id)}
+    dismissed = await repo.dismissed_mark_keys(store, project.id, user.id)
+
+    views = []
+    for group in groups:
+        slot = stored.get(group.slot_id)
+        state = slot_state(group, counts)
+        marks = [
+            m
+            for m in marks_for(group, slot, state, signals, now())
+            if m.key not in dismissed
+        ]
+        view = await _view(
+            store, blobs, project, group,
+            (slot.name if slot else "") or _fallback_name(group), counts,
         )
-        for group in groups
-    ]
+        view.spec = slot.spec if slot else []
+        view.due_at = slot.due_at if slot else None
+        view.marks = [
+            MarkView(kind=m.kind, label=m.label, detail=m.detail, key=m.key) for m in marks
+        ]
+        views.append(view)
+    return views
+
+
+class SetSpec(BaseModel):
+    spec: list[str]
+    due_at: datetime | None = None
+
+
+@router.post("/{slot_id}/spec")
+async def set_spec(
+    slot_id: str, body: SetSpec, project: ProjectDep, store: StoreDep, user: UserDep
+) -> Slot:
+    """Confirm the slot's definition of done. Humans confirm specs — always."""
+    guard(project, user, Permission.UPLOAD_IMAGES)
+    group = await _require_group(store, project, slot_id)
+
+    cleaned = [entry.strip() for entry in body.spec if entry.strip()]
+    for entry in cleaned:
+        if parse_aspect(entry) is None:
+            raise HTTPException(400, f"'{entry}' is not an aspect like 16:9")
+
+    slot = await repo.load(store, Slot, slot_id)
+    if slot is None:
+        # Like naming: giving a legacy slot a spec is what finally writes it down.
+        slot = Slot(id=slot_id, project_id=project.id)
+        for chain in group.variants:
+            for asset in chain.versions:
+                asset.slot_id = slot_id
+                await repo.save(store, asset)
+
+    slot.spec = cleaned
+    slot.due_at = body.due_at
+    await repo.save(store, slot)
+    return slot
+
+
+class DismissMark(BaseModel):
+    key: str
+
+
+@router.post("/marks/dismiss", status_code=204)
+async def dismiss_mark(
+    body: DismissMark, project: ProjectDep, store: StoreDep, user: UserDep
+) -> None:
+    """Store the one storable fact about a mark: this user said stop."""
+    await repo.save(
+        store,
+        MarkDismissal(
+            id=uuid4().hex, project_id=project.id, user_id=user.id, key=body.key.strip()
+        ),
+    )
 
 
 def _fallback_name(group: SlotGroup) -> str:

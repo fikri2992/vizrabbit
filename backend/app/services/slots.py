@@ -16,6 +16,7 @@ from app.domain.entities import (
     now,
 )
 from app.domain.lifecycle import DefectState
+from app.domain.marks import DefectSignal
 from app.domain.permissions import Permission, require
 from app.domain.slots import SlotGroup, SlotState, group_into_slots, slot_state
 from app.imaging.canvas import from_bytes, to_png_bytes
@@ -51,20 +52,32 @@ async def slot_containing(store: Store, image: ImageAsset) -> SlotGroup | None:
     return None
 
 
-async def open_defect_counts(store: Store, groups: list[SlotGroup]) -> dict[str, int]:
-    """Per-image count of defects still needing someone — archived variants included.
+async def defect_signals(store: Store, groups: list[SlotGroup]) -> dict[str, DefectSignal]:
+    """Per-tip facts the derived marks need: open count, questions, oldest open.
 
-    Counting them costs nothing and keeps the map usable by callers that want the
-    archived column's numbers for a tooltip; excluding archived work is the
-    *caller's* job, done against ``SlotGroup.archived_by``.
+    One walk over the same defects ``open_defect_counts`` reads, so marks cost no
+    extra queries. Archived variants included; excluding them is the caller's job.
     """
-    counts: dict[str, int] = {}
+    signals: dict[str, DefectSignal] = {}
     for group in groups:
         for chain in group.variants:
             tip = chain.tip
             defects = await repo.defects_for_image(store, tip.id)
-            counts[tip.id] = sum(1 for d in defects if d.status in NEEDS_ATTENTION)
-    return counts
+            open_defects = [d for d in defects if d.status in NEEDS_ATTENTION]
+            signals[tip.id] = DefectSignal(
+                open_count=len(open_defects),
+                question_count=sum(
+                    1 for d in open_defects if d.status is DefectState.NEEDS_HUMAN_REVIEW
+                ),
+                oldest_open=min((d.created_at for d in open_defects), default=None),
+            )
+    return signals
+
+
+async def open_defect_counts(store: Store, groups: list[SlotGroup]) -> dict[str, int]:
+    """Per-image count of defects still needing someone — archived variants included."""
+    signals = await defect_signals(store, groups)
+    return {image_id: signal.open_count for image_id, signal in signals.items()}
 
 
 async def states_for(store: Store, groups: list[SlotGroup]) -> dict[str, SlotState]:
@@ -174,6 +187,7 @@ __all__ = [
     "add_variant",
     "apply_approval",
     "create_slot",
+    "defect_signals",
     "delete_preview_for_slot",
     "needs_attention",
     "open_defect_counts",

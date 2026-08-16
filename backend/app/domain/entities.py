@@ -159,6 +159,8 @@ class Run(BaseModel):
     started_by: str
     status: RunStatus = RunStatus.QUEUED
     image_ids: list[str] = Field(default_factory=list)
+    #: Where this batch will run (decision 22) — scopes platform checks. Empty = unknown.
+    placement: str = ""
     created_at: datetime = Field(default_factory=now)
     finished_at: datetime | None = None
 
@@ -174,6 +176,11 @@ class Slot(BaseModel):
     id: str
     project_id: str
     name: str = ""
+    #: The definition of done (decision 19 glossary: slot spec): aspect strings
+    #: like "16:9". Optional — an empty spec means the slot behaves as it always
+    #: has, and nothing is ever computed as "missing".
+    spec: list[str] = Field(default_factory=list)
+    due_at: datetime | None = None
     created_at: datetime = Field(default_factory=now)
 
 
@@ -323,4 +330,19 @@ class Notification(BaseModel):
     body: str
     link: str = ""
     read: bool = False
+    created_at: datetime = Field(default_factory=now)
+
+
+class MarkDismissal(BaseModel):
+    """A user waving away one derived mark (decision 20).
+
+    Marks themselves are never stored — they are recomputed from state on every
+    read — so the only stored fact is the human saying "stop showing me this".
+    ``key`` is the mark's stable identity: ``{slot_id}:{kind}:{label}``.
+    """
+
+    id: str
+    project_id: str
+    user_id: str
+    key: str
     created_at: datetime = Field(default_factory=now)

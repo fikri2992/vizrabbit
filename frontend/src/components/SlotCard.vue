@@ -9,7 +9,7 @@ export default {
     canUpload: { type: Boolean, default: false },
     canDelete: { type: Boolean, default: false },
   },
-  emits: ['add-variant', 'delete', 'rename'],
+  emits: ['add-variant', 'delete', 'rename', 'spec'],
   data() {
     return { menuOpen: false }
   },
@@ -30,6 +30,10 @@ export default {
     },
     hasHistory() {
       return this.hasVariants || this.slot.variants.some((variant) => variant.versions.length > 1)
+    },
+    /** Marks worth a chip. Pickable is skipped — the state pill already says it. */
+    chipMarks() {
+      return (this.slot.marks || []).filter((mark) => mark.kind !== 'pickable')
     },
   },
   methods: {
@@ -75,6 +79,25 @@ export default {
         </span>
       </div>
     </RouterLink>
+
+    <!-- Derived marks (decision 20): the agent's work and gaps, discovered in place. -->
+    <div v-if="chipMarks.length" class="flex flex-wrap gap-1.5 border-t border-edge px-3 py-1.5">
+      <span
+        v-for="mark in chipMarks"
+        :key="mark.key"
+        class="rounded-full border px-1.5 py-0.5 text-[10px]"
+        :class="{
+          'border-warning/50 text-warning': mark.kind === 'missing',
+          'border-blocker/50 text-blocker': mark.kind === 'stalled',
+          'border-neutral-600 text-neutral-300': mark.kind === 'question',
+        }"
+        :title="mark.detail"
+      >
+        <template v-if="mark.kind === 'missing'">missing {{ mark.label }}</template>
+        <template v-else-if="mark.kind === 'stalled'">stalled {{ mark.label }}</template>
+        <template v-else>{{ mark.label }} question{{ mark.label === '1' ? '' : 's' }}</template>
+      </span>
+    </div>
 
     <!-- The full history lives in the flow view now; the card just hints there is one. -->
     <div v-if="hasHistory" class="border-t border-edge px-3 py-2">
@@ -124,6 +147,14 @@ export default {
           @click.stop.prevent="$emit('rename', slot); menuOpen = false"
         >
           Rename slot…
+        </button>
+        <button
+          v-if="canUpload"
+          type="button"
+          class="block w-full px-3 py-1.5 text-left text-neutral-300 hover:bg-edge hover:text-white"
+          @click.stop.prevent="$emit('spec', slot); menuOpen = false"
+        >
+          Set deliverables…
         </button>
         <button
           v-if="canDelete"

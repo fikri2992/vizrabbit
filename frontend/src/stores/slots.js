@@ -52,7 +52,7 @@ export const useSlotsStore = defineStore('slots', {
      * Upload a batch. `grouped` collapses the whole batch into one slot's competing
      * variants; `slotId` appends them to a slot that already exists.
      */
-    async upload(projectId, files, { grouped = false, slotId = '' } = {}) {
+    async upload(projectId, files, { grouped = false, slotId = '', placement = '' } = {}) {
       this.uploading = true
       this.error = ''
       try {
@@ -60,6 +60,7 @@ export const useSlotsStore = defineStore('slots', {
         for (const file of files) form.append('files', file)
         const group = groupingParam({ grouped, slotId })
         if (group) form.append('group_into', group)
+        if (placement) form.append('placement', placement)
 
         const response = await fetch(`/api/projects/${projectId}/runs`, {
           method: 'POST',
@@ -105,6 +106,25 @@ export const useSlotsStore = defineStore('slots', {
     async rename(projectId, slotId, name) {
       await api.post(`/api/projects/${projectId}/slots/${slotId}/name`, { name })
       await this.fetchSlots(projectId)
+    },
+
+    /** Confirm the slot's definition of done — aspects like "16:9". */
+    async setSpec(projectId, slotId, spec, dueAt = null) {
+      await api.post(`/api/projects/${projectId}/slots/${slotId}/spec`, {
+        spec,
+        due_at: dueAt,
+      })
+      await this.fetchSlots(projectId)
+    },
+
+    /** Wave one mark away, for this user, permanently. */
+    async dismissMark(projectId, key) {
+      await api.post(`/api/projects/${projectId}/slots/marks/dismiss`, { key })
+      // Cheap local removal — the server filters it on the next real fetch.
+      this.slots = this.slots.map((slot) => ({
+        ...slot,
+        marks: (slot.marks || []).filter((mark) => mark.key !== key),
+      }))
     },
 
     async deletePreview(projectId, slotId) {
