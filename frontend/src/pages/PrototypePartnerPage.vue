@@ -288,7 +288,7 @@ export default {
           Overnight: reviewed 3 new files ·
           <button class="text-teal-300 hover:underline" @click="view = 'slot'">drafted a fix for Hero</button>
           · nudged Maya ·
-          <button class="text-neutral-300 hover:underline" @click="tealOpen = true">one question</button>
+          <button class="text-neutral-300 hover:underline" @click="view = 'review-teal'">one question</button>
         </span>
         <button
           type="button"
@@ -340,55 +340,14 @@ export default {
             class="border-t border-edge px-3 py-1.5"
             :class="newClass()"
           >
+            <!-- the chip only announces; judging happens on the review page, at size -->
             <button
               type="button"
               class="rounded-full border border-neutral-600 px-1.5 py-0.5 text-[10px] text-neutral-300 hover:bg-edge"
-              @click.stop="tealOpen = !tealOpen"
+              @click.stop="view = 'review-teal'"
             >
               1 question for you
             </button>
-            <!-- asked in place, answerable in place, ignorable forever -->
-            <div v-if="tealOpen" class="mt-2 rounded-md bg-panel-2 p-2.5" @click.stop>
-              <p class="text-[11px] leading-relaxed text-neutral-200">
-                Is this teal in brand? Judge for yourself:
-              </p>
-              <div class="mt-1.5 flex items-center gap-2">
-                <span class="flex flex-col items-center gap-0.5">
-                  <span class="h-7 w-12 rounded ring-1 ring-inset ring-white/15" style="background: #2fa584" />
-                  <span class="text-[9px] text-neutral-500">your brand teal</span>
-                </span>
-                <span class="flex flex-col items-center gap-0.5">
-                  <span class="h-7 w-12 rounded ring-1 ring-inset ring-white/15" style="background: #2aa47d" />
-                  <span class="text-[9px] text-neutral-500">this CTA</span>
-                </span>
-                <span class="self-start pt-1.5 text-[10px] text-neutral-400">
-                  ΔE 2.2 — near twins. But it's on a CTA, and I've been wrong about teal twice.
-                </span>
-              </div>
-              <div class="mt-1.5 flex gap-1.5">
-                <button
-                  type="button"
-                  class="rounded bg-neutral-50 px-2 py-0.5 text-[10px] font-medium text-neutral-900"
-                  @click="answerTeal(true); tealOpen = false"
-                >
-                  In brand
-                </button>
-                <button
-                  type="button"
-                  class="rounded border border-neutral-600 px-2 py-0.5 text-[10px] text-neutral-300"
-                  @click="answerTeal(false); tealOpen = false"
-                >
-                  Flag it
-                </button>
-                <button
-                  type="button"
-                  class="ml-auto text-[10px] text-neutral-600"
-                  @click="tealOpen = false"
-                >
-                  later
-                </button>
-              </div>
-            </div>
           </div>
           <div
             v-if="morning && slot.id === 'story' && tealAnswered"
@@ -524,6 +483,83 @@ export default {
                 Discard draft
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ REVIEW PAGE, teal question — colour judged in its context ═══════ -->
+    <div v-else-if="view === 'review-teal'" class="mx-auto max-w-6xl px-6 py-5">
+      <div class="flex items-center gap-3">
+        <button type="button" class="text-xs text-neutral-500 hover:text-neutral-200" @click="view = 'project'">
+          ← Slots
+        </button>
+        <span class="text-sm text-neutral-100">story_teaser.png</span>
+        <span class="text-[11px] text-neutral-500">Variant 1 · v1</span>
+      </div>
+
+      <div class="mt-4 grid gap-5 lg:grid-cols-[1fr_320px]">
+        <!-- the asset at size, the CTA in question pinned -->
+        <div class="mx-auto w-full max-w-sm">
+          <div class="relative aspect-[9/16] overflow-hidden rounded-lg bg-[#3b7a5a] ring-1 ring-inset ring-white/10">
+            <span class="absolute left-1/2 top-[16%] -translate-x-1/2 text-lg font-semibold text-[#f2ede4]">
+              NEW SEASON
+            </span>
+            <span
+              class="absolute bottom-[14%] left-1/2 flex h-[7%] w-[60%] -translate-x-1/2 items-center justify-center rounded-full text-sm font-medium text-white"
+              style="background: #2aa47d"
+            >
+              SHOP NOW
+            </span>
+            <span
+              class="absolute bottom-[12%] left-1/2 flex size-6 -translate-x-1/2 translate-y-full items-center justify-center rounded-full bg-[#c4b5fd] text-[11px] font-semibold text-neutral-900 ring-2 ring-black/40"
+            >
+              ?
+            </span>
+          </div>
+          <p class="mt-2 text-center text-[11px] text-neutral-500">
+            the CTA in question, where it will actually be seen
+          </p>
+        </div>
+
+        <!-- the question as a thread: evidence at honest size, then the ask -->
+        <div class="space-y-2.5">
+          <div class="rounded-lg border border-edge-strong bg-panel p-3" :class="newClass()">
+            <p class="text-xs text-neutral-100">? · Is this CTA's teal in brand?</p>
+            <p class="mt-1 text-[11px] leading-relaxed text-neutral-400">
+              I measured it against the teal you confirmed in the brand profile. They are
+              near twins — ΔE 2.2, inside your tolerance of 3. I would normally pass it,
+              but it is on a CTA and I have been wrong about teal twice. So: your eyes.
+            </p>
+            <div class="mt-3 grid grid-cols-2 gap-1.5">
+              <div>
+                <div class="h-16 rounded-md ring-1 ring-inset ring-white/15" style="background: #2fa584" />
+                <p class="mt-1 text-center text-[10px] text-neutral-500">your confirmed teal · #2fa584</p>
+              </div>
+              <div>
+                <div class="h-16 rounded-md ring-1 ring-inset ring-white/15" style="background: #2aa47d" />
+                <p class="mt-1 text-center text-[10px] text-neutral-500">this CTA · #2aa47d</p>
+              </div>
+            </div>
+            <div class="mt-3 flex gap-1.5">
+              <button
+                type="button"
+                class="flex-1 rounded-md bg-neutral-50 px-2 py-1 text-[11px] font-medium text-neutral-900"
+                @click="answerTeal(true); view = 'project'"
+              >
+                In brand — pass it
+              </button>
+              <button
+                type="button"
+                class="flex-1 rounded-md border border-neutral-600 px-2 py-1 text-[11px] text-neutral-300"
+                @click="answerTeal(false); view = 'project'"
+              >
+                Flag it
+              </button>
+            </div>
+            <p class="mt-1.5 text-center text-[10px] text-neutral-600">
+              either answer teaches the tolerance · "later" is fine too — just leave
+            </p>
           </div>
         </div>
       </div>
