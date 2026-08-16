@@ -72,6 +72,13 @@ export default {
       if (event.target?.closest?.('input, textarea, select')) return
       if (event.key === 'Escape') this.$emit('close')
     },
+    startWipe(event) {
+      // Capture keeps the drag alive when the cursor outruns the frame —
+      // without it, leaving the box mid-drag strands the divider.
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+      this.wiping = true
+      this.onWipe(event)
+    },
     onWipe(event) {
       if (!this.wiping) return
       const rect = this.$refs.wipeBox.getBoundingClientRect()
@@ -83,6 +90,7 @@ export default {
     },
     onPanStart(event) {
       if (event.target.closest('button, a, select')) return
+      event.currentTarget.setPointerCapture?.(event.pointerId)
       this.panning = true
       this.panFrom = { x: event.clientX - this.pan.x, y: event.clientY - this.pan.y }
     },
@@ -160,10 +168,10 @@ export default {
         ref="wipeBox"
         class="relative max-h-full select-none touch-none overflow-hidden rounded-xl ring-1 ring-white/15"
         :style="{ aspectRatio: ratio, maxWidth: `min(100%, 76vh * ${ratio})` }"
-        @pointerdown="wiping = true; onWipe($event)"
+        @pointerdown="startWipe"
         @pointermove="onWipe"
         @pointerup="wiping = false"
-        @pointerleave="wiping = false"
+        @pointercancel="wiping = false"
       >
         <img :src="right.version.original_url" :alt="caption(right)" class="block h-full w-full" draggable="false" />
         <img
@@ -207,7 +215,7 @@ export default {
       @pointerdown="onPanStart"
       @pointermove="onPanMove"
       @pointerup="panning = false"
-      @pointerleave="panning = false"
+      @pointercancel="panning = false"
     >
       <figure v-for="(node, side) in [left, right]" :key="side" class="flex min-w-0 flex-1 flex-col">
         <div

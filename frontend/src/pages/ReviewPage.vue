@@ -211,10 +211,27 @@ export default {
         .then((view) => (this.placement = view.platform ? view : null))
         .catch(() => {})
       this.startStream(this.projectId)
+      this.prefetchSiblings()
       // Fresh upload: open on the agent's live narration instead of an empty rail.
       if (this.agentWorking) this.tab = 'activity'
       const first = this.railItems[0]
       if (first) this.select(first)
+    },
+
+    /**
+     * Warm the browser cache with the sibling variants' originals, so stepping
+     * V1→V2 swaps an already-decoded image instead of flashing while it loads.
+     */
+    prefetchSiblings() {
+      const ids = new Set([
+        ...(this.slotContext?.siblings || []).map((sibling) => sibling.image_id),
+        ...this.versions.map((version) => version.id),
+      ])
+      ids.delete(this.imageId)
+      for (const id of ids) {
+        const image = new Image()
+        image.src = `/api/blobs/projects/${this.projectId}/images/${id}/original.png`
+      }
     },
 
     async select(item) {
