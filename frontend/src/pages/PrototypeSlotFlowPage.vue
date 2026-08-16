@@ -8,7 +8,6 @@
  */
 
 const APPROVER = 'Ola Owner'
-const RATIOS = { a: 16 / 9, b: 1, c: 9 / 16 }
 
 const NODE_W = 168
 const COL_W = 196
@@ -18,11 +17,11 @@ function seed() {
   return {
     name: 'Hero banner — autumn',
     nodes: [
-      { id: 'a', parent: null, label: '16x9', v: 'v1',
+      { id: 'a', parent: null, label: '16x9', v: 'v1', ratio: 16 / 9,
         who: 'Maya', when: '14 Aug', open: 3, status: 'done', tone: '#8a5a3b' },
-      { id: 'b', parent: null, label: '1x1', v: 'v1',
+      { id: 'b', parent: null, label: '1x1', v: 'v1', ratio: 1,
         who: 'Maya', when: '14 Aug', open: 0, status: 'done', tone: '#3b5a8a' },
-      { id: 'c', parent: null, label: '9x16', v: 'v1',
+      { id: 'c', parent: null, label: '9x16', v: 'v1', ratio: 9 / 16,
         who: 'Leo', when: '15 Aug', open: 0, status: 'scanning', tone: '#3b7a5a' },
       { id: 'a1', parent: 'a', label: '', v: 'v2',
         who: 'Leo', when: '15 Aug', open: 0, status: 'done', tone: '#9a6a45' },
@@ -35,6 +34,81 @@ function seed() {
     ],
     approved: ['a1a'],
   }
+}
+
+/** Deterministic PRNG, so the messy case is the same mess every reload. */
+function rng(seedValue) {
+  let s = seedValue
+  return () => {
+    s |= 0
+    s = (s + 0x6d2b79f5) | 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const DELIVERABLES = [
+  { label: '16x9', ratio: 16 / 9, tone: '#8a5a3b' },
+  { label: '1x1', ratio: 1, tone: '#3b5a8a' },
+  { label: '9x16', ratio: 9 / 16, tone: '#3b7a5a' },
+  { label: '4x5', ratio: 4 / 5, tone: '#6a3b7a' },
+  { label: '2x3', ratio: 2 / 3, tone: '#7a3b52' },
+  { label: '21x9', ratio: 21 / 9, tone: '#3b6a7a' },
+]
+const PEOPLE = ['Maya', 'Leo', 'Sari', 'Ade', 'Nia']
+
+/** A realistically messy slot: six deliverables, deep chains, repeated forks. */
+function seedMessy() {
+  const random = rng(20260816)
+  const nodes = []
+  const shade = (hex, depth) => {
+    const n = parseInt(hex.slice(1), 16)
+    const bump = Math.min(60, depth * 14)
+    const parts = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) =>
+      Math.min(255, c + bump),
+    )
+    return `#${parts.map((c) => c.toString(16).padStart(2, '0')).join('')}`
+  }
+
+  DELIVERABLES.forEach((deliverable, index) => {
+    const rootId = `d${index}`
+    nodes.push({
+      id: rootId, parent: null, label: deliverable.label, v: 'v1',
+      ratio: deliverable.ratio, tone: deliverable.tone,
+      who: PEOPLE[index % PEOPLE.length], when: `${12 + (index % 4)} Aug`,
+      open: random() < 0.45 ? 1 + Math.floor(random() * 3) : 0,
+      status: random() < 0.12 ? 'scanning' : 'done',
+    })
+
+    const grow = (parentId, depth, version) => {
+      if (depth > 4 || nodes.length > 54) return
+      const roll = random()
+      const count = roll < 0.34 ? 0 : roll < 0.72 ? 1 : roll < 0.93 ? 2 : 3
+      for (let k = 0; k < count; k += 1) {
+        const id = `${parentId}_${k}`
+        const open = random() < 0.38 ? 1 + Math.floor(random() * 2) : 0
+        nodes.push({
+          id, parent: parentId, label: '',
+          v: k === 0 ? `v${version}` : `v${version} alt${k}`,
+          tone: shade(deliverable.tone, depth),
+          who: PEOPLE[Math.floor(random() * PEOPLE.length)],
+          when: `${14 + Math.min(6, depth)} Aug`,
+          open,
+          status: random() < 0.08 ? 'scanning' : 'done',
+        })
+        grow(id, depth + 1, version + 1)
+      }
+    }
+    grow(rootId, 1, 2)
+  })
+
+  // Approve a couple of clean leaves so both approval models have something to show.
+  const parents = new Set(nodes.map((n) => n.parent))
+  const leaves = nodes.filter((n) => !parents.has(n.id) && !n.open && n.status === 'done')
+  const approved = [leaves[1]?.id, leaves[4]?.id].filter(Boolean)
+
+  return { name: 'Autumn campaign — full set', nodes, approved }
 }
 
 /** Fake threads so the sidebar has something to be. Keyed by node id. */
@@ -59,6 +133,7 @@ export default {
   data() {
     return {
       NODE_W, COL_W, ROW_H, APPROVER,
+      dataset: 'simple',
       slot: seed(),
       chats: seedChats(),
       model: 'perBranch',
@@ -66,6 +141,8 @@ export default {
       hovered: null,
       hoverBox: null,
       draft: '',
+      zoom: 1,
+      collapsed: {},
     }
   },
   computed: {
@@ -75,10 +152,33 @@ export default {
     byId() {
       return Object.fromEntries(this.slot.nodes.map((n) => [n.id, n]))
     },
-    childrenOf() {
+    /** Real parentage, ignoring what is folded away. */
+    allChildrenOf() {
       const map = {}
       for (const n of this.slot.nodes) (map[n.parent] ??= []).push(n)
       return map
+    },
+    /** What the canvas draws: a collapsed node keeps its children out of layout. */
+    childrenOf() {
+      const map = {}
+      for (const n of this.slot.nodes) {
+        if (n.parent && this.collapsed[n.parent]) continue
+        if (n.parent && this.hiddenUnderCollapse.has(n.parent)) continue
+        ;(map[n.parent] ??= []).push(n)
+      }
+      return map
+    },
+    /** Every descendant of a collapsed node, so nothing orphaned gets drawn. */
+    hiddenUnderCollapse() {
+      const hidden = new Set()
+      const walk = (id) => {
+        for (const child of this.allChildrenOf[id] || []) {
+          hidden.add(child.id)
+          walk(child.id)
+        }
+      }
+      for (const id of Object.keys(this.collapsed)) if (this.collapsed[id]) walk(id)
+      return hidden
     },
     roots() {
       return this.childrenOf[null] || []
@@ -170,7 +270,29 @@ export default {
       return cur
     },
     ratioOf(node) {
-      return RATIOS[this.rootOf(node).id] || 1
+      return this.rootOf(node).ratio || 1
+    },
+    hiddenCount(node) {
+      let total = 0
+      const walk = (id) => {
+        for (const child of this.allChildrenOf[id] || []) {
+          total += 1
+          walk(child.id)
+        }
+      }
+      walk(node.id)
+      return total
+    },
+    toggleCollapse(node) {
+      this.collapsed = { ...this.collapsed, [node.id]: !this.collapsed[node.id] }
+    },
+    useDataset(which) {
+      this.dataset = which
+      this.slot = which === 'messy' ? seedMessy() : seed()
+      this.chats = which === 'messy' ? {} : seedChats()
+      this.collapsed = {}
+      this.zoom = which === 'messy' ? 0.6 : 1
+      this.selected = this.slot.approved[0] || this.slot.nodes[0].id
     },
     isApproved(node) {
       return this.slot.approved.includes(node.id)
@@ -251,9 +373,7 @@ export default {
       })
     },
     reset() {
-      this.slot = seed()
-      this.chats = seedChats()
-      this.selected = 'a1a'
+      this.useDataset(this.dataset)
     },
     outline(parent = null, depth = 0, acc = []) {
       for (const child of this.childrenOf[parent] || []) {
@@ -287,7 +407,14 @@ export default {
     <div class="relative pb-28 pr-0 xl:pr-[352px]">
       <!-- ═══ TREE ═══ -->
       <div v-if="view === 'tree'" class="overflow-x-auto px-8 pt-10">
-        <div class="mx-auto w-max">
+        <div
+          class="mx-auto w-max"
+          :style="{
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top center',
+            marginBottom: `${(zoom - 1) * layout.height}px`,
+          }"
+        >
           <div
             class="relative"
             :style="{ width: `${layout.width}px`, height: `${layout.height}px` }"
@@ -380,6 +507,15 @@ export default {
                   class="ml-auto rounded bg-neutral-50 px-1.5 py-0.5 text-[9px] font-medium text-neutral-900"
                 >Download</span>
               </div>
+
+              <!-- fold a subtree away; the count is what you are hiding -->
+              <span
+                v-if="(allChildrenOf[row.node.id] || []).length"
+                class="absolute -bottom-2.5 left-1/2 -translate-x-1/2 rounded-full border border-neutral-500 bg-panel px-1.5 text-[9px] leading-4 text-neutral-300 hover:bg-edge"
+                @click.stop="toggleCollapse(row.node)"
+              >
+                {{ collapsed[row.node.id] ? `+${hiddenCount(row.node)}` : '−' }}
+              </span>
             </button>
           </div>
         </div>
@@ -561,6 +697,33 @@ export default {
         <span class="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
           prototype
         </span>
+
+        <div class="flex gap-1">
+          <button
+            v-for="option in [
+              { id: 'simple', label: 'Simple' },
+              { id: 'messy', label: 'Messy' },
+            ]"
+            :key="option.id"
+            type="button"
+            class="rounded-md px-2.5 py-1 text-xs transition"
+            :class="
+              dataset === option.id
+                ? 'bg-neutral-50 font-medium text-neutral-900'
+                : 'text-neutral-300 hover:bg-edge hover:text-neutral-50'
+            "
+            @click="useDataset(option.id)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+
+        <label v-if="view === 'tree'" class="flex items-center gap-1.5 text-[11px] text-neutral-400">
+          zoom
+          <input v-model.number="zoom" type="range" min="0.3" max="1" step="0.05" class="w-24" />
+          <span class="w-8 font-mono text-neutral-300">{{ Math.round(zoom * 100) }}%</span>
+        </label>
+
         <div class="flex gap-1">
           <button
             v-for="option in [
