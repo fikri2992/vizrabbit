@@ -6,6 +6,7 @@ writes what comes back.
 """
 
 import asyncio
+from dataclasses import replace
 from uuid import uuid4
 
 from PIL import Image
@@ -37,7 +38,7 @@ from app.imaging.canvas import from_bytes, to_png_bytes
 from app.imaging.grid_overlay import apply_grid
 from app.infra import repository as repo
 from app.infra.events import Event, EventBus
-from app.infra.storage import ANNOTATED, GRIDDED, ORIGINAL, BlobStore, blob_path
+from app.infra.storage import ANNOTATED, GRIDDED, ORIGINAL, VIDEO, BlobStore, blob_path
 from app.infra.store import Store
 from app.services import brand as brand_service
 from app.services import slots as slot_service
@@ -191,7 +192,6 @@ async def create_run(
             slot = await slot_service.create_slot(store, project.id, _slot_name(filename))
             slot_id, variant = slot.id, 1
 
-        image = from_bytes(data)
         asset = ImageAsset(
             id=new_id(),
             project_id=project.id,
@@ -200,17 +200,55 @@ async def create_run(
             slot_id=slot_id,
             variant=variant,
             uploaded_by=user.id,
-            width=image.width,
-            height=image.height,
         )
-        asset.original_path = await blobs.write(
-            blob_path(project.id, asset.id, ORIGINAL), to_png_bytes(image)
-        )
+        if is_video(data):
+            await _ingest_video(blobs, project.id, asset, data)
+        else:
+            image = from_bytes(data)
+            asset.width, asset.height = image.width, image.height
+            asset.original_path = await blobs.write(
+                blob_path(project.id, asset.id, ORIGINAL), to_png_bytes(image)
+            )
         await repo.save(store, asset)
         run.image_ids.append(asset.id)
 
     await repo.save(store, run)
     return run
+
+
+def is_video(data: bytes) -> bool:
+    """MP4/MOV sniff: an ftyp box at offset 4. No reliance on content-type headers."""
+    return len(data) > 8 and data[4:8] == b"ftyp"
+
+
+async def _ingest_video(blobs: BlobStore, project_id: str, asset: ImageAsset, data: bytes) -> None:
+    """Store the mp4, measure what is mechanical, and give the asset a poster face.
+
+    The poster PNG becomes ``original_path`` so every existing surface — cards,
+    trees, grids, exports — renders a video without knowing videos exist
+    (decision 23). Loudness is measured once, here, and stamped on the asset.
+    """
+    from app.imaging import video as video_ops
+
+    info = await video_ops.probe(data)
+    poster = await video_ops.frame_at(data, 0.0)
+    loudness = await video_ops.measure_loudness(data)
+
+    asset.kind = "video"
+    asset.width, asset.height = info.width, info.height
+    asset.duration = info.duration
+    if loudness is not None:
+        asset.loudness_lufs = loudness.lufs
+        asset.true_peak_db = None if loudness.true_peak_db == float("-inf") else (
+            loudness.true_peak_db
+        )
+    asset.video_path = await blobs.write(
+        blob_path(project_id, asset.id, VIDEO, extension="mp4"), data
+    )
+    poster_image = from_bytes(poster)
+    asset.original_path = await blobs.write(
+        blob_path(project_id, asset.id, ORIGINAL), to_png_bytes(poster_image)
+    )
 
 
 async def _grouping_target(
@@ -348,10 +386,16 @@ async def _process_one(
             blob_path(project.id, asset.id, GRIDDED), to_png_bytes(apply_grid(image, grid))
         )
 
-        report = await process_image(
-            image, guidelines, on_progress=publish, grid=grid, profile=profile
-        )
-        await _persist_report(store, blobs, project, asset, image, report)
+        if asset.kind == "video":
+            report, time_ranges = await _review_video(blobs, asset, guidelines, profile, publish)
+            await _persist_report(
+                store, blobs, project, asset, image, report, time_ranges=time_ranges
+            )
+        else:
+            report = await process_image(
+                image, guidelines, on_progress=publish, grid=grid, profile=profile
+            )
+            await _persist_report(store, blobs, project, asset, image, report)
 
         asset.status = ImageStatus.DONE
         await repo.save(store, asset)
@@ -370,6 +414,45 @@ async def _process_one(
         await repo.save(store, asset)
         await publish("image_failed", {"error": str(exc)})
         raise
+
+
+async def _review_video(
+    blobs: BlobStore,
+    asset: ImageAsset,
+    guidelines: str,
+    profile,
+    publish,
+) -> tuple[ImageReport, dict[int, tuple[float, float]]]:
+    """A video reviews as shots (decision 23): one image review per scene frame.
+
+    Returns one merged report with pins renumbered across shots, and each pin's
+    time range — the shot it was found in. Timestamps are the new pins.
+    """
+    from app.imaging import video as video_ops
+
+    data = await blobs.read(asset.video_path)
+    times = await video_ops.scene_times(data)
+    await publish("shots_detected", {"shots": len(times), "duration": asset.duration})
+
+    merged = ImageReport()
+    time_ranges: dict[int, tuple[float, float]] = {}
+    pin_offset = 0
+    for index, start in enumerate(times):
+        end = times[index + 1] if index + 1 < len(times) else asset.duration
+        frame = from_bytes(await video_ops.frame_at(data, start))
+        grid = Grid.for_image(frame.width, frame.height)
+        report = await process_image(
+            frame, guidelines, on_progress=publish, grid=grid, profile=profile
+        )
+        for defect in report.defects:
+            defect.pin += pin_offset
+            # Annotation is frozen by design; renumbering means replacing it.
+            defect.annotation = replace(defect.annotation, pin=defect.pin)
+            time_ranges[defect.pin] = (round(start, 2), round(end, 2))
+            merged.defects.append(defect)
+        merged.dismissals.extend(report.dismissals)
+        pin_offset += len(report.defects)
+    return merged, time_ranges
 
 
 def judgment_notes(report: ImageReport, cap: int = 3) -> list[str]:
@@ -398,12 +481,14 @@ async def _persist_report(
     asset: ImageAsset,
     image: Image.Image,
     report: ImageReport,
+    time_ranges: dict[int, tuple[float, float]] | None = None,
 ) -> None:
     from app.imaging.annotate import draw_annotations
 
     grid = Grid.for_image(image.width, image.height)
     for defect in report.defects:
         span = grid.span_bounds(defect.cells)
+        when = (time_ranges or {}).get(defect.pin)
         await repo.save(
             store,
             DefectRecord(
@@ -426,6 +511,8 @@ async def _persist_report(
                 ),
                 circle_iterations=defect.circle_iterations,
                 circle_verified=defect.circle_verified,
+                time_start=when[0] if when else None,
+                time_end=when[1] if when else None,
                 status=(
                     DefectState.NEEDS_HUMAN_REVIEW
                     if defect.needs_human_review
@@ -449,7 +536,9 @@ async def _persist_report(
             ),
         )
 
-    if report.defects:
+    # Videos skip the annotated render: circles from different shots drawn onto
+    # one poster would be a lie. The player's timeline carries the markers.
+    if report.defects and asset.kind != "video":
         annotated = draw_annotations(image, [d.annotation for d in report.defects])
         asset.annotated_path = await blobs.write(
             blob_path(project.id, asset.id, ANNOTATED), to_png_bytes(annotated)

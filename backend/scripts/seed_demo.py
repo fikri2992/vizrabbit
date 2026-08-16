@@ -32,6 +32,7 @@ from app.domain.entities import (
     Role,
     Run,
     RunStatus,
+    Slot,
     now,
 )
 from app.domain.grid import Grid
@@ -277,11 +278,100 @@ async def seed() -> None:
     await seed_brand_profile(store)
     variants = await seed_variant_slot(store, blobs)
     await seed_agent_draft(store, blobs, asset)
+    await seed_video_slot(store, blobs)
 
     print(f"seeded project {PROJECT_ID}: 1 legacy image, {len(DEMO_DEFECTS)} defects")
     print(f"plus 1 slot with {variants} competing variants (one approved, one with a v2 fix)")
     print("plus an agent-drafted fix on the legacy image (decision 21)")
     print("sign in as owner@acme.com (owner) or dee@acme.com (reviewer)")
+
+
+async def seed_video_slot(store, blobs) -> None:
+    """A reviewed launch spot (decision 23), generated on the spot with ffmpeg.
+
+    Skipped quietly when ffmpeg is absent — the rest of the demo stands alone.
+    Two shots, real loudness measurement, and defects carrying time ranges so
+    the review player's timeline has something to be.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    if shutil.which("ffmpeg") is None:
+        return
+
+    from app.services.runs import _ingest_video
+
+    with tempfile.TemporaryDirectory() as scratch:
+        path = f"{scratch}/spot.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i", "color=c=0x8a5a3b:s=540x960:d=3:r=12",
+                "-f", "lavfi", "-i", "color=c=0x22303f:s=540x960:d=3:r=12",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=6",
+                "-filter_complex", "[0:v][1:v]concat=n=2:v=1[v]",
+                "-map", "[v]", "-map", "2:a", "-pix_fmt", "yuv420p", "-shortest", path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        data = open(path, "rb").read()
+
+    run = Run(
+        id="r-video",
+        project_id=PROJECT_ID,
+        started_by=OWNER_ID,
+        status=RunStatus.DONE,
+        image_ids=["i-spot"],
+        placement="tiktok",
+    )
+    await repo.save(store, run)
+    await repo.save(store, Slot(id="s-spot", project_id=PROJECT_ID, name="Launch spot"))
+
+    asset = ImageAsset(
+        id="i-spot",
+        project_id=PROJECT_ID,
+        run_id=run.id,
+        filename="launch_spot.mp4",
+        slot_id="s-spot",
+        uploaded_by=OWNER_ID,
+        status=ImageStatus.DONE,
+    )
+    await _ingest_video(blobs, PROJECT_ID, asset, data)
+    await repo.save(store, asset)
+
+    grid = Grid.for_image(asset.width, asset.height)
+    for pin, (cells, t0, t1, comment) in enumerate(
+        [
+            (["D7"], 0.0, 3.0, "Strapline text in the opening shot is illegible at feed size."),
+            (["C4"], 3.0, 6.0, "The product render's edge melts where it meets the panel."),
+        ],
+        start=1,
+    ):
+        cx, cy, radius = grid.circle_for(cells)
+        span = grid.span_bounds(cells)
+        await repo.save(
+            store,
+            DefectRecord(
+                id=f"dv-{pin}",
+                project_id=PROJECT_ID,
+                image_id=asset.id,
+                pin=pin,
+                cells=cells,
+                category=Category.ARTIFACT,
+                severity=Severity.WARNING,
+                comment=comment,
+                rule_ref="ARTF-01",
+                circle=Circle(cx=cx, cy=cy, radius=radius),
+                region=Region(
+                    left=span.left, top=span.top, width=span.width, height=span.height
+                ),
+                time_start=t0,
+                time_end=t1,
+                status=DefectState.OPEN,
+            ),
+        )
 
 
 async def seed_agent_draft(store, blobs, original: ImageAsset) -> None:

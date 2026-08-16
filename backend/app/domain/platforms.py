@@ -22,6 +22,7 @@ PLATFORMS: dict[str, dict] = {
         "min_height": 1920,
         # Caption block along the bottom, action rail down the right edge.
         "insets": {"top": 0.08, "bottom": 0.14, "left": 0.0, "right": 0.12},
+        "loudness_target": -14.0,
     },
     "instagram": {
         "label": "Instagram feed",
@@ -29,6 +30,7 @@ PLATFORMS: dict[str, dict] = {
         "min_width": 1080,
         "min_height": 1350,
         "insets": {"top": 0.04, "bottom": 0.08, "left": 0.03, "right": 0.03},
+        "loudness_target": -14.0,
     },
     "web": {
         "label": "Web",
@@ -36,8 +38,12 @@ PLATFORMS: dict[str, dict] = {
         "min_width": 1200,
         "min_height": 675,
         "insets": {"top": 0.0, "bottom": 0.0, "left": 0.0, "right": 0.0},
+        "loudness_target": -16.0,
     },
 }
+
+#: How far integrated loudness may sit from the platform target, in LU.
+LOUDNESS_TOLERANCE = 2.0
 
 #: Below this share of pixels lost to the crop, nobody needs telling.
 CROP_LOSS_THRESHOLD = 0.10
@@ -120,6 +126,23 @@ def check(width: int, height: int, platform: str) -> list[PlacementFinding]:
             )
         )
     return findings
+
+
+def loudness_finding(lufs: float | None, platform: str) -> PlacementFinding | None:
+    """The audio advisory (decision 23): measured LUFS vs the platform's norm."""
+    if lufs is None or platform not in PLATFORMS:
+        return None
+    target = PLATFORMS[platform]["loudness_target"]
+    if abs(lufs - target) <= LOUDNESS_TOLERANCE:
+        return None
+    return PlacementFinding(
+        platform=platform,
+        kind="loudness",
+        detail=(
+            f"measured {lufs:.1f} LUFS against the {PLATFORMS[platform]['label']} "
+            f"target of {target:.0f} ±{LOUDNESS_TOLERANCE:.0f}"
+        ),
+    )
 
 
 def _aspect_text(aspect: float) -> str:

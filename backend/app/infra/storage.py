@@ -12,6 +12,7 @@ from app.config import settings
 ORIGINAL = "original"
 GRIDDED = "gridded"
 ANNOTATED = "annotated"
+VIDEO = "video"
 
 
 def blob_path(project_id: str, image_id: str, kind: str, extension: str = "png") -> str:

@@ -117,6 +117,10 @@ export default {
     everythingClosed() {
       return isClear(this.defects)
     },
+    /** Video defects with a shot range — what the timeline draws. */
+    timedDefects() {
+      return this.defects.filter((defect) => typeof defect.time_start === 'number')
+    },
     approved() {
       return Boolean(this.activeImage?.image.approved_by)
     },
@@ -301,6 +305,15 @@ export default {
       } catch (error) {
         this.notice = error.message
       }
+    },
+    timecode(seconds) {
+      const s = Math.floor(seconds || 0)
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+    },
+    seekTo(at, defectId) {
+      const player = this.$refs.player
+      if (player) player.currentTime = at
+      if (defectId) this.selectedId = defectId
     },
     async onDecidePlacement(key, decision) {
       await this.decidePlacement(this.projectId, this.imageId, key, decision)
@@ -554,8 +567,60 @@ export default {
     </div>
 
     <div class="grid min-h-0 flex-1 lg:grid-cols-[1fr_23rem]">
+      <!-- Video column (decision 23): the player is the canvas, the timeline the pins -->
+      <div
+        v-if="activeImage.image.kind === 'video'"
+        class="flex min-h-0 flex-col gap-2 p-3"
+      >
+        <div class="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black">
+          <video
+            ref="player"
+            :src="activeImage.video_url"
+            :poster="activeImage.original_url"
+            controls
+            class="h-full w-full object-contain"
+          />
+        </div>
+        <!-- defects live ON the timeline: amber ranges at their timestamps -->
+        <div v-if="timedDefects.length" class="px-1">
+          <div class="relative h-2 rounded bg-neutral-800">
+            <button
+              v-for="defect in timedDefects"
+              :key="defect.id"
+              type="button"
+              class="absolute top-0 h-2 rounded bg-warning/80 hover:bg-warning"
+              :style="{
+                left: `${(defect.time_start / (activeImage.image.duration || 1)) * 100}%`,
+                width: `${Math.max(1.5, ((defect.time_end - defect.time_start) / (activeImage.image.duration || 1)) * 100)}%`,
+              }"
+              :title="`pin ${defect.pin} · ${timecode(defect.time_start)}–${timecode(defect.time_end)} — ${defect.comment}`"
+              @click="seekTo(defect.time_start, defect.id)"
+            />
+          </div>
+          <div class="mt-1 flex flex-wrap gap-1.5">
+            <button
+              v-for="defect in timedDefects"
+              :key="`chip-${defect.id}`"
+              type="button"
+              class="rounded-full border px-2 py-0.5 text-[10px]"
+              :class="
+                selectedId === defect.id
+                  ? 'border-neutral-300 text-neutral-100'
+                  : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'
+              "
+              @click="seekTo(defect.time_start, defect.id)"
+            >
+              {{ defect.pin }} · {{ timecode(defect.time_start) }}
+            </button>
+          </div>
+        </div>
+        <p v-if="typeof activeImage.image.loudness_lufs === 'number'" class="px-1 text-[10px] text-neutral-500">
+          audio: {{ activeImage.image.loudness_lufs.toFixed(1) }} LUFS measured at ingest
+        </p>
+      </div>
+
       <!-- Canvas column: the image contain-fits — the rail is the only thing that scrolls -->
-      <div class="flex min-h-0 flex-col gap-2 p-3">
+      <div v-else class="flex min-h-0 flex-col gap-2 p-3">
         <div class="relative min-h-0 flex-1 overflow-hidden rounded-lg">
           <ReviewCanvas
             ref="canvas"

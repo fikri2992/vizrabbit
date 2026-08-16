@@ -26,7 +26,8 @@ from app.services import slots as slot_service
 
 router = APIRouter(prefix="/api", tags=["runs"])
 
-ACCEPTED_TYPES = {"image/png", "image/jpeg", "image/webp"}
+#: Videos ride the same 20MB cap for now — short social spots, not masters.
+ACCEPTED_TYPES = {"image/png", "image/jpeg", "image/webp", "video/mp4", "video/quicktime"}
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 #: Comment interval that keeps proxies from closing an idle SSE connection.
@@ -61,6 +62,8 @@ class ImageView(BaseModel):
     original_url: str
     annotated_url: str | None = None
     gridded_url: str | None = None
+    #: Set for videos: the mp4 itself. ``original_url`` stays the poster frame.
+    video_url: str | None = None
     slot: SlotContext | None = None
 
 
@@ -173,6 +176,7 @@ async def _image_view(store, blobs, image: ImageAsset, with_slot: bool = False) 
         original_url=blobs.public_url(image.original_path),
         annotated_url=blobs.public_url(image.annotated_path) if image.annotated_path else None,
         gridded_url=blobs.public_url(image.gridded_path) if image.gridded_path else None,
+        video_url=blobs.public_url(image.video_path) if image.video_path else None,
         slot=await _slot_context(store, image) if with_slot else None,
     )
 
@@ -248,6 +252,9 @@ async def submit_fix(
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "larger than 20MB")
+    if run_service.is_video(data):
+        # A re-cut is a new upload for now — the recheck pipeline compares stills.
+        raise HTTPException(415, "upload a re-cut as a new video; fixes compare still images")
 
     version, submitted = await recheck_service.submit_fix(
         store, blobs, project, original, user, file.filename or original.filename, data
@@ -290,6 +297,11 @@ async def image_placement(
         return PlacementView()
 
     decisions = await repo.placement_decisions_for_image(store, image_id)
+    computed = platforms.check(image.width, image.height, placement)
+    if image.kind == "video":
+        loudness = platforms.loudness_finding(image.loudness_lufs, placement)
+        if loudness is not None:
+            computed.append(loudness)
     findings = [
         PlacementFindingView(
             kind=f.kind,
@@ -297,7 +309,7 @@ async def image_placement(
             key=f.key_for(image_id),
             decision=(d.decision if (d := decisions.get(f.key_for(image_id))) else None),
         )
-        for f in platforms.check(image.width, image.height, placement)
+        for f in computed
     ]
     return PlacementView(
         platform=placement,

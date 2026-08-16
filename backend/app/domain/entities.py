@@ -200,6 +200,15 @@ class ImageAsset(BaseModel):
     project_id: str
     run_id: str
     filename: str
+    #: "image" or "video" (decision 23). A video's ``original_path`` holds its
+    #: poster frame so every image surface renders unchanged; the mp4 itself
+    #: lives at ``video_path``.
+    kind: str = "image"
+    video_path: str = ""
+    duration: float = 0.0
+    #: EBU R128, measured once at ingest — the audio measured half. None = no audio.
+    loudness_lufs: float | None = None
+    true_peak_db: float | None = None
     #: Empty on pre-slot data; ``domain.slots`` wraps those in a synthetic slot on read.
     slot_id: str = ""
     #: Which competing candidate of the slot this is, numbered from 1.
@@ -255,6 +264,10 @@ class DefectRecord(BaseModel):
     circle_iterations: int = 1
     circle_verified: bool = True
     status: DefectState = DefectState.OPEN
+    #: For video defects: the shot this was found in (decision 23 — timestamps
+    #: are the new pins). None on image defects, which is every pre-video record.
+    time_start: float | None = None
+    time_end: float | None = None
     #: Only set when the Owner override-approves; always carries a rationale.
     rationale: str = ""
     resolved_in_image_id: str | None = None
