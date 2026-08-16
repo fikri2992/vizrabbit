@@ -301,16 +301,96 @@ Tasks:
 - Demo shows at least one platform end-to-end; degrading to one platform is
   the planned cut, not a failure
 
+# Partner phases (2026-08-16) — from docs/product-thesis.md + the partner prototype
+
+Validated in `PrototypePartnerPage.vue` (three feedback rounds; prototype is the
+primary source, in git history). The laws these implement are domain-model
+decisions 19–23. Delete the prototype page as each surface lands for real.
+
+## Phase 10 — Spec + derived marks (foundation, no model calls)
+
+Tasks:
+- `Slot.spec`: deliverable list (label + aspect, optional due date). Optional
+  field; specless slots behave exactly as today
+- Marks derived in the slots endpoint at read time (decision 20): missing
+  deliverable, pickable, stalled fix (age of oldest FIX_SUBMITTED-less open
+  defect request), question pending. No stored agenda documents
+- SlotCard chips + one dismissible quiet line on ProjectPage (dismissals
+  stored per user, the only stored thing)
+- Placement question on the upload staging strip (decision 22); stored on the
+  run, consumed by Phase 9 checks
+
+**Gate 10:** marks are pure functions with table-driven tests; a spec-less
+project renders byte-identical card data to today (regression); dismissing a
+mark survives reload; placement lands on the run document.
+
+## Phase 11 — Draft-as-branch + stance (the partner's heart)
+
+Tasks:
+- After a run's verdicts land: one drafting pass — mechanical defects only
+  (category whitelist), Gemini image-edit call per affected image, result
+  saved as an ordinary branch version authored by the agent (decision 21)
+- Draft rendering: dashed node in the flow view, "draft · by agent" tag
+- Stance in the SlotFlowPage rail: computed facts only (defects resolved,
+  measurements), link to the review page; no generated prose in v1
+- Discard-a-draft: deletes the branch, records a per-slot "propose, don't
+  draft" preference
+
+**Gate 11:** drafting never fires for creative categories (test on the
+whitelist boundary); a draft is indistinguishable from a human version to
+every existing read path (chains/state/approval tests pass unchanged); the
+recheck runs on the draft like any fix; cost cap: ≤ 1 edit call per defect,
+one pass per run.
+
+## Phase 12 — Questions + judgment voice
+
+Tasks:
+- `needs_human_review` defects render as question threads on the review page:
+  evidence at size (swatch pair for colour, crop for geometry), two answers +
+  ignorable; either answer writes through the existing dismissal/memory path
+- Activity feed voice: judgment lines ("kept quiet about X — rule #N") emitted
+  alongside stage events; SSE shape unchanged
+
+**Gate 12:** answering a colour question adjusts the stored tolerance and a
+re-run stops asking; an ignored question never blocks approval flow (test);
+feed renders old events unchanged (compatibility).
+
+## Phase 13 — Video review (biggest lift, independent of 10–12)
+
+Tasks:
+- ffmpeg in the container: scene-cut frames, audio extraction, poster, EBU
+  R128 loudness; frames run the existing image pipeline (decision 23)
+- `DefectRecord.time_start/time_end`; review screen grows a player + timeline
+  with defect ranges; platform safe-area overlay toggle (reuses Phase 9 zones)
+- Measured checks: loudness vs platform target, text reading-speed, safe-area
+  overlap; passes reported with their numbers
+
+**Gate 13:** a seeded spot yields the safe-area defect with a correct time
+range (integration); timeline markers seek; loudness numbers match ffmpeg's
+own report on a reference file; image-only projects untouched (regression).
+
+## Sequencing note
+
+10 → 11 → 12 in order (each consumes the previous); 13 is parallel-safe.
+Hackathon bonus tie-ins: Phase 11 is the nano-banana integration; Gemini Live
+attaches to Phase 12's question threads (voice as an input mode, garnish per
+the thesis); Veo enters as a Phase 8 export extension whose output re-enters
+review.
+
 ## Revised calendar
 
 - Aug 16–19 Phase 6 · Aug 20–22 Phase 7 · Aug 22 Phase 8 · Aug 23–25 Phase 9
-- Aug 26–28 hardening + outstanding Gate 1/3/4 evidence (exhaustive labels,
+- Phases 10–13 slot into Aug 20–28 alongside 7–9 as capacity allows, in cut
+  order below; hardening + outstanding Gate 1/3/4 evidence (exhaustive labels,
   benchmark re-run, 5 real fix pairs, cost/image, fresh-clone README timing)
+  stays Aug 26–28
 - Aug 29–31 Phase 5 submission (video, Devpost, ≥ 24h early) — protected
 
 ## Cut order (revised)
 
-1. Platform checker (Phase 9) → 2. History-tree polish (fall back to grouped
-cards per slot) → 3. Memory collision-grilling → 4. Mentions/notifications.
-Never cut: pipeline, benchmark, review screen, re-check lifecycle, slot
-remodel once started, brand palette once started, deploy, video.
+1. Phase 13 video → 2. Platform checker (Phase 9) → 3. Phase 12 questions →
+4. History-tree polish (fall back to grouped cards per slot) → 5. Memory
+collision-grilling → 6. Mentions/notifications. Phase 10 and 11 are not cut
+once started — they are the demo's spine. Never cut: pipeline, benchmark,
+review screen, re-check lifecycle, slot remodel, brand palette, deploy,
+demo video.
